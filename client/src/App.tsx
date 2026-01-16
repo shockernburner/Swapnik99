@@ -1,6 +1,6 @@
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -18,6 +18,14 @@ import BusinessPage from "@/pages/business";
 import MembersPage from "@/pages/members";
 import AccountingPage from "@/pages/accounting";
 import AdminPage from "@/pages/admin";
+import CompleteProfilePage from "@/pages/complete-profile";
+import PendingApprovalPage from "@/pages/pending-approval";
+
+interface Member {
+  id: string;
+  status: "pending" | "approved" | "rejected";
+  role: "member" | "admin";
+}
 
 function AuthenticatedRouter() {
   return (
@@ -60,9 +68,15 @@ function AuthenticatedApp() {
 }
 
 function AppContent() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
 
-  if (isLoading) {
+  const { data: member, isLoading: memberLoading, error } = useQuery<Member>({
+    queryKey: ["/api/member/me"],
+    enabled: !!user,
+    retry: false,
+  });
+
+  if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
@@ -75,6 +89,39 @@ function AppContent() {
 
   if (!user) {
     return <LandingPage />;
+  }
+
+  if (memberLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Loading profile...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !member) {
+    return <CompleteProfilePage />;
+  }
+
+  if (member.status === "pending") {
+    return <PendingApprovalPage />;
+  }
+
+  if (member.status === "rejected") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <div className="text-center space-y-4">
+          <h1 className="text-2xl font-bold text-destructive">Membership Rejected</h1>
+          <p className="text-muted-foreground">
+            Unfortunately, your membership request was not approved. 
+            Please contact an admin if you believe this was an error.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return <AuthenticatedApp />;

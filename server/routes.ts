@@ -49,6 +49,22 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
     next();
   });
 
+  app.get("/api/member/me", async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      const member = await storage.getMemberByUserId(user.id);
+      if (!member) {
+        return res.status(404).json({ message: "No member profile" });
+      }
+      res.json(member);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.post("/api/members", async (req, res) => {
     try {
       const user = (req as any).user;
@@ -395,7 +411,7 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
       const member = getMember(req);
 
       const { name, memberIds, isGroup } = req.body;
-      const allMemberIds = [...new Set([member.id, ...memberIds])];
+      const allMemberIds = Array.from(new Set([member.id, ...memberIds]));
 
       const room = await storage.createChatRoom(name, allMemberIds, isGroup || false);
       res.json(room);
