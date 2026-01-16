@@ -1,0 +1,238 @@
+Here is a **Replit Agent Task File** for your project, written in the exact style Replit’s AI Agent expects.
+
+You can paste this into:
+
+**Replit → Create Repl → “AI Agent” → Task Description**
+
+---
+
+# Replit Agent Task File
+
+**Project:** Swapnik99 – Private Alumni Social Network
+
+## Role
+
+You are a **senior full-stack engineer and system architect**.
+
+Build a **private Facebook-like web application** called **“Swapnik99”** for **BUET Batch ’99 graduates** only.
+
+This is a **non-commercial alumni community platform**.
+
+### Do NOT include:
+
+* Marketplace
+* Advertisements
+* Separate messenger app
+
+All features must exist inside **one integrated web app**.
+
+---
+
+## Tech Stack (Mandatory)
+
+* **Frontend:** React + Tailwind CSS
+* **Backend:** Node.js + Express
+* **Database:** PostgreSQL
+* **ORM:** Prisma
+* **Authentication:** JWT + bcrypt
+* **Real-time:** Socket.IO
+* **File Uploads:** Local storage or Cloudinary
+* **AI Summaries:** OpenAI API
+
+Monorepo structure:
+
+```
+/client
+/server
+/prisma
+```
+
+---
+
+## Core Features
+
+### 1. Authentication & Users
+
+* Email/password login
+* Admin-approved registration
+* Roles: `admin`, `member`
+* Profile fields:
+
+  * Name
+  * BUET department
+  * Graduation year (fixed: 1999)
+  * Photo
+  * Bio
+  * Profession
+  * Location
+* Friend request & acceptance system
+
+---
+
+### 2. News Feed
+
+* Facebook-style feed
+* Shows:
+
+  * Friend posts
+  * Discussion activity
+  * Event announcements
+* Like & comment support
+
+---
+
+### 3. Integrated Chat
+
+* One-to-one private chat
+* Group chat
+* Real-time messaging using Socket.IO
+* Message notifications
+
+---
+
+### 4. Discussions Module
+
+* Members can create discussions with:
+
+  * Headline
+  * Description / aim
+* Threaded replies
+* Auto-generated **live AI summary**:
+
+  * Updates when new comments are added
+
+---
+
+### 5. Accounting & Transparency (Admin Only Upload)
+
+* Admin uploads:
+
+  * Budgets
+  * Ledgers
+  * Journals
+  * Financial reports (PDF / Excel)
+* Members have read-only access
+* Organized by year & category
+
+---
+
+### 6. Events Module
+
+* Admin creates events:
+
+  * Title
+  * Description
+  * Date
+  * Venue
+  * Photos/videos
+* Members can RSVP
+* Attendance tracking
+
+---
+
+### 7. Business Connect
+
+* Members can post:
+
+  * Business needs
+  * Service offers
+* Others can:
+
+  * Comment publicly
+  * Start private chat
+
+---
+
+## Required Deliverables
+
+### A. Architecture
+
+* Folder structure
+* API layout
+* Auth flow
+* Real-time flow
+
+### B. Database (Prisma)
+
+Models for:
+
+* Users & roles
+* Friendships
+* Posts & comments
+* Discussions & summaries
+* Chat messages
+* Events & RSVPs
+* Accounting documents
+
+### C. Backend (Express)
+
+* Auth routes
+* CRUD APIs
+* Admin approval system
+* File upload endpoints
+* Socket.IO chat server
+* AI summary service
+
+### D. Frontend (React)
+
+* Login & register
+* Feed
+* Chat UI
+* Discussions
+* Events
+* Profile
+* Admin dashboard
+
+### E. Real-Time Chat
+
+* Socket.IO server
+* React client
+* Notifications
+
+### F. AI Summary System
+
+* Trigger on new comments
+* Send discussion text to OpenAI
+* Store summary in DB
+* Display under discussion
+
+---
+
+## Development Rules
+
+* Write **production-ready code**
+* Use **clean folder structure**
+* Add **clear comments**
+* Explain assumptions briefly
+* Keep everything **Replit-compatible**
+* No mock-only solutions — implement real logic
+
+---
+
+## Build Order (Follow Strictly)
+
+1. Architecture
+2. Prisma schema
+3. Backend APIs
+4. Frontend UI
+5. Socket.IO chat
+6. AI summaries
+
+---
+
+## Final Instruction
+
+Generate the **complete full-stack system** step by step.
+Do **not** summarize.
+Write **actual working code**.
+
+---
+
+If you want, I can now also provide:
+
+✅ A **Prisma schema**
+✅ Backend scaffolding
+✅ Frontend UI starter
+✅ Or a **Dockerized version**
+
+Just tell me what you want to generate first.
