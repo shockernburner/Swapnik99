@@ -12,6 +12,7 @@ import logoUrl from "@assets/swapnik_1768561630231.jpeg";
 
 interface ProfileFormData {
   name: string;
+  rollNumber: string;
   department: string;
   currentLocation: string;
   profession: string;
@@ -24,6 +25,7 @@ export default function CompleteProfilePage() {
   const { toast } = useToast();
   const [formData, setFormData] = useState<ProfileFormData>({
     name: "",
+    rollNumber: "",
     department: "",
     currentLocation: "",
     profession: "",
@@ -96,17 +98,29 @@ export default function CompleteProfilePage() {
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="department" className="flex items-center gap-2">
-                <GraduationCap className="h-4 w-4" /> Department
-              </Label>
-              <Input
-                id="department"
-                placeholder="e.g., CSE, EEE, ME"
-                value={formData.department}
-                onChange={(e) => handleChange("department", e.target.value)}
-                data-testid="input-profile-department"
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="rollNumber" className="flex items-center gap-2">
+                  <GraduationCap className="h-4 w-4" /> Roll Number
+                </Label>
+                <Input
+                  id="rollNumber"
+                  placeholder="e.g., 9905001"
+                  value={formData.rollNumber}
+                  onChange={(e) => handleChange("rollNumber", e.target.value)}
+                  data-testid="input-profile-roll"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="department">Department</Label>
+                <Input
+                  id="department"
+                  placeholder="e.g., CSE, EEE, ME"
+                  value={formData.department}
+                  onChange={(e) => handleChange("department", e.target.value)}
+                  data-testid="input-profile-department"
+                />
+              </div>
             </div>
 
             <div className="space-y-2">

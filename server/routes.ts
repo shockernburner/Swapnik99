@@ -460,6 +460,26 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
     }
   });
 
+  app.post("/api/admin/members/:id/make-admin", async (req, res) => {
+    try {
+      if (!requireAdmin(req as any, res)) return;
+      const member = await storage.updateMemberRole(req.params.id, "admin");
+      res.json(member);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/admin/members/:id/remove-admin", async (req, res) => {
+    try {
+      if (!requireAdmin(req as any, res)) return;
+      const member = await storage.updateMemberRole(req.params.id, "member");
+      res.json(member);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
   app.post("/api/admin/accounting", async (req, res) => {
     try {
       if (!requireAdmin(req as any, res)) return;

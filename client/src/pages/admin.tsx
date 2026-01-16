@@ -29,6 +29,8 @@ interface MemberForAdmin {
   id: string;
   name: string;
   email: string;
+  rollNumber?: string;
+  department?: string;
   role: string;
   status: string;
   createdAt: string;
@@ -65,6 +67,24 @@ export default function AdminPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/pending-members"] });
+    },
+  });
+
+  const makeAdminMutation = useMutation({
+    mutationFn: async (memberId: string) => {
+      return apiRequest("POST", `/api/admin/members/${memberId}/make-admin`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/members"] });
+    },
+  });
+
+  const removeAdminMutation = useMutation({
+    mutationFn: async (memberId: string) => {
+      return apiRequest("POST", `/api/admin/members/${memberId}/remove-admin`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/members"] });
     },
   });
 
@@ -330,7 +350,7 @@ export default function AdminPage() {
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="font-medium">{member.name}</h3>
                         {member.role === "admin" && (
                           <Badge variant="default" className="gap-1">
@@ -338,12 +358,43 @@ export default function AdminPage() {
                             Admin
                           </Badge>
                         )}
+                        {member.rollNumber && (
+                          <Badge variant="outline">{member.rollNumber}</Badge>
+                        )}
+                        {member.department && (
+                          <Badge variant="secondary">{member.department}</Badge>
+                        )}
                       </div>
                       <p className="text-sm text-muted-foreground">{member.email}</p>
                     </div>
-                    <div className="text-sm text-muted-foreground flex items-center gap-1">
-                      <Calendar className="h-3 w-3" />
-                      Joined {formatDistanceToNow(new Date(member.createdAt), { addSuffix: true })}
+                    <div className="flex items-center gap-3">
+                      <div className="text-sm text-muted-foreground flex items-center gap-1">
+                        <Calendar className="h-3 w-3" />
+                        Joined {formatDistanceToNow(new Date(member.createdAt), { addSuffix: true })}
+                      </div>
+                      {member.role === "admin" ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => removeAdminMutation.mutate(member.id)}
+                          disabled={removeAdminMutation.isPending}
+                          data-testid={`button-remove-admin-${member.id}`}
+                        >
+                          <UserX className="h-4 w-4 mr-1" />
+                          Remove Admin
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => makeAdminMutation.mutate(member.id)}
+                          disabled={makeAdminMutation.isPending}
+                          data-testid={`button-make-admin-${member.id}`}
+                        >
+                          <Shield className="h-4 w-4 mr-1" />
+                          Make Admin
+                        </Button>
+                      )}
                     </div>
                   </CardContent>
                 </Card>

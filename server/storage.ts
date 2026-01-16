@@ -18,6 +18,7 @@ export interface IStorage {
   getMemberById(id: string): Promise<Member | undefined>;
   createMember(data: InsertMember): Promise<Member>;
   updateMemberStatus(id: string, status: "approved" | "rejected"): Promise<Member | undefined>;
+  updateMemberRole(id: string, role: "admin" | "member"): Promise<Member | undefined>;
   getPendingMembers(): Promise<Member[]>;
   getApprovedMembers(): Promise<Member[]>;
   getAllMembers(): Promise<Member[]>;
@@ -80,6 +81,15 @@ export class DatabaseStorage implements IStorage {
     const [member] = await db
       .update(members)
       .set({ status, updatedAt: new Date() })
+      .where(eq(members.id, id))
+      .returning();
+    return member;
+  }
+
+  async updateMemberRole(id: string, role: "admin" | "member"): Promise<Member | undefined> {
+    const [member] = await db
+      .update(members)
+      .set({ role, updatedAt: new Date() })
       .where(eq(members.id, id))
       .returning();
     return member;
