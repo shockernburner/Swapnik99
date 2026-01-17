@@ -1,48 +1,18 @@
 // Resend email integration for Swapnik99
 import { Resend } from 'resend';
 
-let connectionSettings: any;
+const FROM_EMAIL = 'Swapnik99 <info@swapnik99.org>';
 
-async function getCredentials() {
-  const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
-  const xReplitToken = process.env.REPL_IDENTITY 
-    ? 'repl ' + process.env.REPL_IDENTITY 
-    : process.env.WEB_REPL_RENEWAL 
-    ? 'depl ' + process.env.WEB_REPL_RENEWAL 
-    : null;
-
-  if (!xReplitToken) {
-    throw new Error('X_REPLIT_TOKEN not found for repl/depl');
+async function getResendClient() {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    throw new Error('RESEND_API_KEY environment variable is not set');
   }
-
-  connectionSettings = await fetch(
-    'https://' + hostname + '/api/v2/connection?include_secrets=true&connector_names=resend',
-    {
-      headers: {
-        'Accept': 'application/json',
-        'X_REPLIT_TOKEN': xReplitToken
-      }
-    }
-  ).then(res => res.json()).then(data => data.items?.[0]);
-
-  if (!connectionSettings || (!connectionSettings.settings.api_key)) {
-    throw new Error('Resend not connected');
-  }
-  return { apiKey: connectionSettings.settings.api_key, fromEmail: connectionSettings.settings.from_email };
-}
-
-// WARNING: Never cache this client.
-// Access tokens expire, so a new client must be created each time.
-async function getUncachableResendClient() {
-  const { apiKey, fromEmail } = await getCredentials();
-  return {
-    client: new Resend(apiKey),
-    fromEmail
-  };
+  return new Resend(apiKey);
 }
 
 export async function sendPasswordResetEmail(toEmail: string, resetToken: string, memberName: string) {
-  const { client, fromEmail } = await getUncachableResendClient();
+  const client = await getResendClient();
   
   const baseUrl = process.env.REPLIT_DEV_DOMAIN 
     ? `https://${process.env.REPLIT_DEV_DOMAIN}`
@@ -53,7 +23,7 @@ export async function sendPasswordResetEmail(toEmail: string, resetToken: string
   const resetLink = `${baseUrl}/reset-password?token=${resetToken}`;
   
   const { data, error } = await client.emails.send({
-    from: fromEmail || 'Swapnik99 <noreply@resend.dev>',
+    from: FROM_EMAIL,
     to: toEmail,
     subject: 'Reset Your Swapnik99 Password',
     html: `
