@@ -126,7 +126,13 @@ export default function LoginPage({ onSuccess }: { onSuccess?: () => void }) {
             </Button>
           </form>
 
-          <div className="mt-6 text-center">
+          <div className="mt-4 text-center">
+            <Link href="/forgot-password" className="text-sm text-muted-foreground hover:text-primary" data-testid="link-forgot-password">
+              Forgot your password?
+            </Link>
+          </div>
+
+          <div className="mt-4 text-center">
             <p className="text-sm text-muted-foreground">
               Not yet a member?{" "}
               <Link href="/register" className="text-primary hover:underline font-medium" data-testid="link-register">

@@ -173,6 +173,15 @@ export const chatMessages = pgTable("chat_messages", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: serial("id").primaryKey(),
+  memberId: varchar("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  token: varchar("token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  used: boolean("used").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const membersRelations = relations(members, ({ many }) => ({
   posts: many(posts),
   friendshipsAsRequester: many(friendships, { relationName: "requester" }),

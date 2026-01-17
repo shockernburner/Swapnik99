@@ -11,6 +11,8 @@ import NotFound from "@/pages/not-found";
 import LandingPage from "@/pages/landing";
 import LoginPage from "@/pages/login";
 import RegisterPage from "@/pages/register";
+import ForgotPasswordPage from "@/pages/forgot-password";
+import ResetPasswordPage from "@/pages/reset-password";
 import FeedPage from "@/pages/feed";
 import ChatPage from "@/pages/chat";
 import DiscussionsPage from "@/pages/discussions";
@@ -75,6 +77,8 @@ function UnauthenticatedRouter() {
       <Route path="/" component={LandingPage} />
       <Route path="/login">{() => <LoginPage />}</Route>
       <Route path="/register">{() => <RegisterPage />}</Route>
+      <Route path="/forgot-password" component={ForgotPasswordPage} />
+      <Route path="/reset-password" component={ResetPasswordPage} />
       <Route component={LandingPage} />
     </Switch>
   );

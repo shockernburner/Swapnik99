@@ -146,6 +146,89 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
     }
   });
 
+  // Password reset - request token
+  app.post("/api/auth/forgot-password", async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+
+      const member = await storage.getMemberByEmail(email.toLowerCase());
+      if (!member) {
+        // Don't reveal if email exists
+        return res.json({ message: "If an account exists with this email, a reset link has been generated" });
+      }
+
+      // Generate reset token
+      const crypto = await import("crypto");
+      const token = crypto.randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + 1000 * 60 * 60); // 1 hour
+
+      await storage.createPasswordResetToken(member.id, token, expiresAt);
+
+      // In production, you would send an email here
+      // For now, we'll return the token (for development/testing)
+      const resetUrl = `/reset-password?token=${token}`;
+      
+      console.log(`Password reset link for ${email}: ${resetUrl}`);
+      
+      res.json({ 
+        message: "If an account exists with this email, a reset link has been generated",
+        // Include reset URL in development for testing
+        resetUrl: process.env.NODE_ENV === "development" ? resetUrl : undefined
+      });
+    } catch (error: any) {
+      console.error("Forgot password error:", error);
+      res.status(500).json({ message: "Failed to process request" });
+    }
+  });
+
+  // Password reset - validate token
+  app.get("/api/auth/reset-password/:token", async (req, res) => {
+    try {
+      const { token } = req.params;
+      const resetToken = await storage.getPasswordResetToken(token);
+
+      if (!resetToken || resetToken.used || new Date() > resetToken.expiresAt) {
+        return res.status(400).json({ message: "Invalid or expired reset token" });
+      }
+
+      res.json({ valid: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Password reset - set new password
+  app.post("/api/auth/reset-password", async (req, res) => {
+    try {
+      const { token, password } = req.body;
+
+      if (!token || !password) {
+        return res.status(400).json({ message: "Token and password are required" });
+      }
+
+      if (password.length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      }
+
+      const resetToken = await storage.getPasswordResetToken(token);
+      if (!resetToken || resetToken.used || new Date() > resetToken.expiresAt) {
+        return res.status(400).json({ message: "Invalid or expired reset token" });
+      }
+
+      const hashedPassword = await hashPassword(password);
+      await storage.updateMemberPassword(resetToken.memberId, hashedPassword);
+      await storage.markPasswordResetTokenUsed(token);
+
+      res.json({ message: "Password reset successfully" });
+    } catch (error: any) {
+      console.error("Reset password error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // Middleware to set member on request
   app.use(async (req, res, next) => {
     // Check custom session first

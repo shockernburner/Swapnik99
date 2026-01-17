@@ -5,6 +5,7 @@ import {
   discussions, discussionReplies, events, eventRsvps,
   accountingDocuments, businessListings, businessComments,
   chatRooms, chatRoomMembers, chatMessages, friendships,
+  passwordResetTokens,
   type User, type Member, type Post, type Discussion, type Event,
   type BusinessListing, type ChatRoom, type ChatMessage, type AccountingDocument,
   type InsertPost, type InsertDiscussion, type InsertEvent, type InsertBusinessListing,
@@ -55,6 +56,11 @@ export interface IStorage {
   getChatRoomMessages(roomId: number): Promise<(ChatMessage & { sender: Member })[]>;
   createChatMessage(data: InsertChatMessage): Promise<ChatMessage>;
   createChatRoom(name: string, memberIds: string[], isGroup: boolean): Promise<ChatRoom>;
+
+  createPasswordResetToken(memberId: string, token: string, expiresAt: Date): Promise<void>;
+  getPasswordResetToken(token: string): Promise<{ memberId: string; expiresAt: Date; used: boolean | null } | undefined>;
+  markPasswordResetTokenUsed(token: string): Promise<void>;
+  updateMemberPassword(memberId: string, password: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -415,6 +421,36 @@ export class DatabaseStorage implements IStorage {
     );
 
     return room;
+  }
+
+  async createPasswordResetToken(memberId: string, token: string, expiresAt: Date): Promise<void> {
+    await db.insert(passwordResetTokens).values({ memberId, token, expiresAt });
+  }
+
+  async getPasswordResetToken(token: string): Promise<{ memberId: string; expiresAt: Date; used: boolean | null } | undefined> {
+    const [result] = await db
+      .select({
+        memberId: passwordResetTokens.memberId,
+        expiresAt: passwordResetTokens.expiresAt,
+        used: passwordResetTokens.used,
+      })
+      .from(passwordResetTokens)
+      .where(eq(passwordResetTokens.token, token));
+    return result;
+  }
+
+  async markPasswordResetTokenUsed(token: string): Promise<void> {
+    await db
+      .update(passwordResetTokens)
+      .set({ used: true })
+      .where(eq(passwordResetTokens.token, token));
+  }
+
+  async updateMemberPassword(memberId: string, password: string): Promise<void> {
+    await db
+      .update(members)
+      .set({ password, updatedAt: new Date() })
+      .where(eq(members.id, memberId));
   }
 }
 
