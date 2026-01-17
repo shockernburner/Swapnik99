@@ -77,11 +77,16 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
         return res.status(400).json({ message: "Member profile already exists" });
       }
 
+      // Get email from claims, user object, or database
+      const userEmail = user.claims?.email || user.email;
+      const dbUser = await storage.getUser(user.id);
+      const email = userEmail || dbUser?.email || req.body.email || "unknown@example.com";
+
       const data = insertMemberSchema.parse({
         ...req.body,
         userId: user.id,
-        email: user.email || req.body.email,
-        name: req.body.name || `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Anonymous",
+        email,
+        name: req.body.name || `${user.firstName || user.claims?.first_name || ""} ${user.lastName || user.claims?.last_name || ""}`.trim() || "Anonymous",
       });
 
       const member = await storage.createMember(data);
