@@ -16,6 +16,7 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getMemberByUserId(userId: string): Promise<Member | undefined>;
   getMemberById(id: string): Promise<Member | undefined>;
+  getMemberByEmail(email: string): Promise<Member | undefined>;
   createMember(data: InsertMember): Promise<Member>;
   updateMemberStatus(id: string, status: "approved" | "rejected"): Promise<Member | undefined>;
   updateMemberRole(id: string, role: "admin" | "member"): Promise<Member | undefined>;
@@ -69,6 +70,11 @@ export class DatabaseStorage implements IStorage {
 
   async getMemberById(id: string): Promise<Member | undefined> {
     const [member] = await db.select().from(members).where(eq(members.id, id));
+    return member;
+  }
+
+  async getMemberByEmail(email: string): Promise<Member | undefined> {
+    const [member] = await db.select().from(members).where(eq(members.email, email.toLowerCase()));
     return member;
   }
 

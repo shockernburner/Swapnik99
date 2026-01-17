@@ -5,6 +5,7 @@ import { insertPostSchema, insertDiscussionSchema, insertEventSchema, insertBusi
 import OpenAI from "openai";
 import { setupAuth } from "./replit_integrations/auth";
 import { registerAuthRoutes } from "./replit_integrations/auth/routes";
+import { hashPassword, verifyPassword } from "./auth";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -41,8 +42,119 @@ function requireAdmin(req: any, res: any): boolean {
 export async function registerRoutes(server: Server, app: Express): Promise<void> {
   await setupAuth(app);
   registerAuthRoutes(app);
+
+  // Custom email/password authentication endpoints
+  app.post("/api/auth/register", async (req, res) => {
+    try {
+      const { email, password, name, rollNumber, department, currentLocation, profession, company, phone, bio } = req.body;
+
+      if (!email || !password || !name) {
+        return res.status(400).json({ message: "Email, password, and name are required" });
+      }
+
+      if (password.length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      }
+
+      const existing = await storage.getMemberByEmail(email);
+      if (existing) {
+        return res.status(400).json({ message: "An account with this email already exists" });
+      }
+
+      const hashedPassword = await hashPassword(password);
+
+      const member = await storage.createMember({
+        email: email.toLowerCase(),
+        password: hashedPassword,
+        name,
+        rollNumber: rollNumber || null,
+        department: department || null,
+        location: currentLocation || null,
+        profession: profession || null,
+        company: company || null,
+        phone: phone || null,
+        bio: bio || null,
+      });
+
+      // Set session
+      (req.session as any).memberId = member.id;
+
+      res.json({ message: "Registration successful", member: { ...member, password: undefined } });
+    } catch (error: any) {
+      console.error("Registration error:", error);
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const { email, password } = req.body;
+
+      if (!email || !password) {
+        return res.status(400).json({ message: "Email and password are required" });
+      }
+
+      const member = await storage.getMemberByEmail(email);
+      if (!member) {
+        return res.status(401).json({ message: "Invalid email or password", notRegistered: true });
+      }
+
+      if (!member.password) {
+        return res.status(401).json({ message: "Please use the social login option you originally registered with" });
+      }
+
+      const isValid = await verifyPassword(password, member.password);
+      if (!isValid) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+
+      // Set session
+      (req.session as any).memberId = member.id;
+
+      res.json({ member: { ...member, password: undefined } });
+    } catch (error: any) {
+      console.error("Login error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/auth/logout", (req, res) => {
+    req.session.destroy((err) => {
+      if (err) {
+        return res.status(500).json({ message: "Logout failed" });
+      }
+      res.clearCookie("connect.sid");
+      res.json({ message: "Logged out successfully" });
+    });
+  });
+
+  app.get("/api/auth/me", async (req, res) => {
+    try {
+      const memberId = (req.session as any)?.memberId;
+      if (!memberId) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+
+      const member = await storage.getMemberById(memberId);
+      if (!member) {
+        return res.status(401).json({ message: "Member not found" });
+      }
+
+      res.json({ ...member, password: undefined });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Middleware to set member on request
   app.use(async (req, res, next) => {
-    if ((req as any).user) {
+    // Check custom session first
+    const memberId = (req.session as any)?.memberId;
+    if (memberId) {
+      const member = await storage.getMemberById(memberId);
+      (req as any).member = member;
+    } else if ((req as any).user) {
+      // Fallback to Replit Auth
       const member = await storage.getMemberByUserId((req as any).user.id);
       (req as any).member = member;
     }
