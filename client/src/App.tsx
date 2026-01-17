@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -6,10 +6,11 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { useAuth } from "@/hooks/use-auth";
 import { Loader2 } from "lucide-react";
 import NotFound from "@/pages/not-found";
 import LandingPage from "@/pages/landing";
+import LoginPage from "@/pages/login";
+import RegisterPage from "@/pages/register";
 import FeedPage from "@/pages/feed";
 import ChatPage from "@/pages/chat";
 import DiscussionsPage from "@/pages/discussions";
@@ -18,11 +19,12 @@ import BusinessPage from "@/pages/business";
 import MembersPage from "@/pages/members";
 import AccountingPage from "@/pages/accounting";
 import AdminPage from "@/pages/admin";
-import CompleteProfilePage from "@/pages/complete-profile";
 import PendingApprovalPage from "@/pages/pending-approval";
 
 interface Member {
   id: string;
+  email: string;
+  name: string;
   status: "pending" | "approved" | "rejected";
   role: "member" | "admin";
 }
@@ -67,16 +69,27 @@ function AuthenticatedApp() {
   );
 }
 
-function AppContent() {
-  const { user, isLoading: authLoading } = useAuth();
+function UnauthenticatedRouter() {
+  return (
+    <Switch>
+      <Route path="/" component={LandingPage} />
+      <Route path="/login">{() => <LoginPage />}</Route>
+      <Route path="/register">{() => <RegisterPage />}</Route>
+      <Route component={LandingPage} />
+    </Switch>
+  );
+}
 
-  const { data: member, isLoading: memberLoading, error } = useQuery<Member>({
-    queryKey: ["/api/member/me"],
-    enabled: !!user,
+function AppContent() {
+  const [location] = useLocation();
+
+  const { data: member, isLoading, error } = useQuery<Member>({
+    queryKey: ["/api/auth/me"],
     retry: false,
+    staleTime: 1000 * 60 * 5,
   });
 
-  if (authLoading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
@@ -87,29 +100,17 @@ function AppContent() {
     );
   }
 
-  if (!user) {
-    return <LandingPage />;
-  }
-
-  if (memberLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-muted-foreground">Loading profile...</p>
-        </div>
-      </div>
-    );
-  }
-
+  // Not authenticated - show public pages
   if (error || !member) {
-    return <CompleteProfilePage />;
+    return <UnauthenticatedRouter />;
   }
 
+  // Authenticated but pending approval
   if (member.status === "pending") {
     return <PendingApprovalPage />;
   }
 
+  // Authenticated but rejected
   if (member.status === "rejected") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -124,6 +125,7 @@ function AppContent() {
     );
   }
 
+  // Fully authenticated and approved
   return <AuthenticatedApp />;
 }
 

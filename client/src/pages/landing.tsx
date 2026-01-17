@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Users, MessageSquare, Calendar, Briefcase, Shield, Sparkles } from "lucide-react";
+import { Link } from "wouter";
 import logoImage from "@assets/swapnik_1768561630231.jpeg";
 
 export default function LandingPage() {
@@ -18,7 +19,10 @@ export default function LandingPage() {
           </div>
           <div className="flex items-center gap-3">
             <Button variant="outline" asChild data-testid="button-login">
-              <a href="/api/login">Log In</a>
+              <Link href="/login">Log In</Link>
+            </Button>
+            <Button asChild data-testid="button-register-nav">
+              <Link href="/register">Register</Link>
             </Button>
           </div>
         </div>
@@ -42,7 +46,7 @@ export default function LandingPage() {
               </p>
               <div className="flex flex-wrap gap-4">
                 <Button size="lg" asChild data-testid="button-get-started">
-                  <a href="/api/login">Get Started</a>
+                  <Link href="/register">Get Started</Link>
                 </Button>
                 <Button size="lg" variant="outline" asChild data-testid="button-learn-more">
                   <a href="#features">Learn More</a>
@@ -165,7 +169,7 @@ export default function LandingPage() {
             across continents and time zones.
           </p>
           <Button size="lg" asChild data-testid="button-join-community">
-            <a href="/api/login">Join Our Community</a>
+            <Link href="/register">Join Our Community</Link>
           </Button>
         </div>
       </section>
