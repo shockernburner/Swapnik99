@@ -12,14 +12,12 @@ import logoUrl from "@assets/swapnik_1768561630231.jpeg";
 
 interface ForgotPasswordResponse {
   message: string;
-  resetUrl?: string;
 }
 
 export default function ForgotPasswordPage() {
   const { toast } = useToast();
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
-  const [resetUrl, setResetUrl] = useState<string | null>(null);
 
   const mutation = useMutation({
     mutationFn: async (data: { email: string }) => {
@@ -28,9 +26,6 @@ export default function ForgotPasswordPage() {
     },
     onSuccess: (data) => {
       setSubmitted(true);
-      if (data.resetUrl) {
-        setResetUrl(data.resetUrl);
-      }
       toast({
         title: "Check your email",
         description: data.message,
@@ -70,18 +65,13 @@ export default function ForgotPasswordPage() {
             </div>
             <CardTitle className="text-2xl">Check Your Email</CardTitle>
             <CardDescription>
-              If an account exists with that email, you'll receive a password reset link.
+              If an account exists with that email address, you will receive a password reset link shortly.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {resetUrl && (
-              <div className="p-4 bg-muted rounded-lg">
-                <p className="text-sm text-muted-foreground mb-2">Development mode - Reset link:</p>
-                <Link href={resetUrl} className="text-primary hover:underline text-sm break-all" data-testid="link-reset-url">
-                  {window.location.origin}{resetUrl}
-                </Link>
-              </div>
-            )}
+            <p className="text-sm text-muted-foreground text-center">
+              The link will expire in 1 hour for security reasons. If you don't see the email, please check your spam folder.
+            </p>
             <div className="text-center">
               <Link href="/login" className="text-primary hover:underline inline-flex items-center gap-2" data-testid="link-back-to-login">
                 <ArrowLeft className="h-4 w-4" /> Back to Login

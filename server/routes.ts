@@ -6,6 +6,7 @@ import OpenAI from "openai";
 import { setupAuth } from "./replit_integrations/auth";
 import { registerAuthRoutes } from "./replit_integrations/auth/routes";
 import { hashPassword, verifyPassword } from "./auth";
+import { sendPasswordResetEmail } from "./email";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -156,8 +157,8 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
 
       const member = await storage.getMemberByEmail(email.toLowerCase());
       if (!member) {
-        // Don't reveal if email exists
-        return res.json({ message: "If an account exists with this email, a reset link has been generated" });
+        // Don't reveal if email exists - always return success message
+        return res.json({ message: "If an account exists with this email, a password reset link has been sent" });
       }
 
       // Generate reset token
@@ -167,16 +168,17 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
 
       await storage.createPasswordResetToken(member.id, token, expiresAt);
 
-      // In production, you would send an email here
-      // For now, we'll return the token (for development/testing)
-      const resetUrl = `/reset-password?token=${token}`;
-      
-      console.log(`Password reset link for ${email}: ${resetUrl}`);
+      // Send password reset email
+      try {
+        await sendPasswordResetEmail(member.email, token, member.name);
+        console.log(`Password reset email sent to ${email}`);
+      } catch (emailError) {
+        console.error("Failed to send password reset email:", emailError);
+        return res.status(500).json({ message: "Failed to send reset email. Please try again later." });
+      }
       
       res.json({ 
-        message: "If an account exists with this email, a reset link has been generated",
-        // Include reset URL in development for testing
-        resetUrl: process.env.NODE_ENV === "development" ? resetUrl : undefined
+        message: "If an account exists with this email, a password reset link has been sent"
       });
     } catch (error: any) {
       console.error("Forgot password error:", error);
