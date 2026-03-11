@@ -1,5 +1,5 @@
 {
-  "id": "86a3015d-a422-487b-b026-1b4c87baca92",
+  "id": "7c4fb51e-c15c-437c-a6e3-71f4e807ed55",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -877,6 +877,19 @@
           "primaryKey": false,
           "notNull": false
         },
+        "last_seen": {
+          "name": "last_seen",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_online": {
+          "name": "is_online",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
         "role": {
           "name": "role",
           "type": "user_role",
@@ -1368,7 +1381,7 @@
       "values": [
         "pending",
         "accepted",
-        "rejected"
+        "blocked"
       ]
     },
     "public.user_approval_status": {

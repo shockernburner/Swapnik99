@@ -1,6 +1,6 @@
--- CREATE TYPE "public"."friendship_status" AS ENUM('pending', 'accepted', 'rejected');--> statement-breakpoint
--- CREATE TYPE "public"."user_approval_status" AS ENUM('pending', 'approved', 'rejected');--> statement-breakpoint
--- CREATE TYPE "public"."user_role" AS ENUM('user', 'admin');--> statement-breakpoint
+CREATE TYPE "public"."friendship_status" AS ENUM('pending', 'accepted', 'blocked');--> statement-breakpoint
+CREATE TYPE "public"."user_approval_status" AS ENUM('pending', 'approved', 'rejected');--> statement-breakpoint
+CREATE TYPE "public"."user_role" AS ENUM('user', 'admin');--> statement-breakpoint
 CREATE TABLE "accounting_documents" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"uploaded_by" varchar NOT NULL,
@@ -116,6 +116,8 @@ CREATE TABLE "members" (
 	"company" varchar,
 	"location" varchar,
 	"phone" varchar,
+	"last_seen" timestamp,
+	"is_online" boolean DEFAULT false,
 	"role" "user_role" DEFAULT 'user',
 	"approval_status" "user_approval_status" DEFAULT 'pending',
 	"created_at" timestamp DEFAULT now(),
