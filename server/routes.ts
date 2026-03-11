@@ -1,7 +1,13 @@
 import type { Express } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
-import { insertPostSchema, insertDiscussionSchema, insertEventSchema, insertBusinessListingSchema, insertMemberSchema } from "@shared/schema";
+import {
+  insertPostSchema,
+  insertDiscussionSchema,
+  insertEventSchema,
+  insertBusinessListingSchema,
+  insertMemberSchema,
+} from "@shared/schema";
 import OpenAI from "openai";
 import { setupAuth } from "./replit_integrations/auth";
 import { registerAuthRoutes } from "./replit_integrations/auth/routes";
@@ -40,26 +46,46 @@ function requireAdmin(req: any, res: any): boolean {
   return true;
 }
 
-export async function registerRoutes(server: Server, app: Express): Promise<void> {
+export async function registerRoutes(
+  server: Server,
+  app: Express,
+): Promise<void> {
   await setupAuth(app);
   registerAuthRoutes(app);
 
   // Custom email/password authentication endpoints
   app.post("/api/auth/register", async (req, res) => {
     try {
-      const { email, password, name, rollNumber, department, currentLocation, profession, company, phone, bio } = req.body;
+      const {
+        email,
+        password,
+        name,
+        rollNumber,
+        department,
+        currentLocation,
+        profession,
+        company,
+        phone,
+        bio,
+      } = req.body;
 
       if (!email || !password || !name) {
-        return res.status(400).json({ message: "Email, password, and name are required" });
+        return res
+          .status(400)
+          .json({ message: "Email, password, and name are required" });
       }
 
       if (password.length < 6) {
-        return res.status(400).json({ message: "Password must be at least 6 characters" });
+        return res
+          .status(400)
+          .json({ message: "Password must be at least 6 characters" });
       }
 
       const existing = await storage.getMemberByEmail(email);
       if (existing) {
-        return res.status(400).json({ message: "An account with this email already exists" });
+        return res
+          .status(400)
+          .json({ message: "An account with this email already exists" });
       }
 
       const normalizedEmail = email.toLowerCase();
@@ -86,7 +112,10 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
       // Set session
       (req.session as any).memberId = member.id;
 
-      res.json({ message: "Registration successful", member: { ...member, password: undefined } });
+      res.json({
+        message: "Registration successful",
+        member: { ...member, password: undefined },
+      });
     } catch (error: any) {
       console.error("Registration error:", error);
       res.status(400).json({ message: error.message });
@@ -98,16 +127,25 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
       const { email, password } = req.body;
 
       if (!email || !password) {
-        return res.status(400).json({ message: "Email and password are required" });
+        return res
+          .status(400)
+          .json({ message: "Email and password are required" });
       }
 
       const member = await storage.getMemberByEmail(email);
       if (!member) {
-        return res.status(401).json({ message: "Invalid email or password", notRegistered: true });
+        return res
+          .status(401)
+          .json({ message: "Invalid email or password", notRegistered: true });
       }
 
       if (!member.password) {
-        return res.status(401).json({ message: "Please use the social login option you originally registered with" });
+        return res
+          .status(401)
+          .json({
+            message:
+              "Please use the social login option you originally registered with",
+          });
       }
 
       const isValid = await verifyPassword(password, member.password);
@@ -116,7 +154,9 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
       }
 
       if (member.approvalStatus !== "approved") {
-        return res.status(403).json({ message: "Your account is awaiting admin approval." });
+        return res
+          .status(403)
+          .json({ message: "Your account is awaiting admin approval." });
       }
 
       // Set session
@@ -168,13 +208,22 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
       const member = await storage.getMemberByEmail(email.toLowerCase());
       if (!member) {
         // Don't reveal if email exists - always return success message
-        return res.json({ message: "If an account exists with this email, a password reset link has been sent" });
+        return res.json({
+          message:
+            "If an account exists with this email, a password reset link has been sent",
+        });
       }
 
       // Generate reset token
       const crypto = await import("crypto");
       const token = crypto.randomBytes(32).toString("hex");
-      const expiresAt = new Date(Date.now() + 1000 * 60 * 60); // 1 hour
+      const expiresAt = new Date(Date.now() + 1000 * 60 * 60);
+
+      console.log("Creating reset token:", {
+        memberId: member.id,
+        token,
+        expiresAt,
+      });
 
       await storage.createPasswordResetToken(member.id, token, expiresAt);
 
@@ -184,11 +233,16 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
         console.log(`Password reset email sent to ${email}`);
       } catch (emailError) {
         console.error("Failed to send password reset email:", emailError);
-        return res.status(500).json({ message: "Failed to send reset email. Please try again later." });
+        return res
+          .status(500)
+          .json({
+            message: "Failed to send reset email. Please try again later.",
+          });
       }
-      
-      res.json({ 
-        message: "If an account exists with this email, a password reset link has been sent"
+
+      res.json({
+        message:
+          "If an account exists with this email, a password reset link has been sent",
       });
     } catch (error: any) {
       console.error("Forgot password error:", error);
@@ -203,7 +257,9 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
       const resetToken = await storage.getPasswordResetToken(token);
 
       if (!resetToken || resetToken.used || new Date() > resetToken.expiresAt) {
-        return res.status(400).json({ message: "Invalid or expired reset token" });
+        return res
+          .status(400)
+          .json({ message: "Invalid or expired reset token" });
       }
 
       res.json({ valid: true });
@@ -218,16 +274,22 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
       const { token, password } = req.body;
 
       if (!token || !password) {
-        return res.status(400).json({ message: "Token and password are required" });
+        return res
+          .status(400)
+          .json({ message: "Token and password are required" });
       }
 
       if (password.length < 6) {
-        return res.status(400).json({ message: "Password must be at least 6 characters" });
+        return res
+          .status(400)
+          .json({ message: "Password must be at least 6 characters" });
       }
 
       const resetToken = await storage.getPasswordResetToken(token);
       if (!resetToken || resetToken.used || new Date() > resetToken.expiresAt) {
-        return res.status(400).json({ message: "Invalid or expired reset token" });
+        return res
+          .status(400)
+          .json({ message: "Invalid or expired reset token" });
       }
 
       const hashedPassword = await hashPassword(password);
@@ -281,19 +343,25 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
 
       const existing = await storage.getMemberByUserId(user.id);
       if (existing) {
-        return res.status(400).json({ message: "Member profile already exists" });
+        return res
+          .status(400)
+          .json({ message: "Member profile already exists" });
       }
 
       // Get email from claims, user object, or database
       const userEmail = user.claims?.email || user.email;
       const dbUser = await storage.getUser(user.id);
-      const email = userEmail || dbUser?.email || req.body.email || "unknown@example.com";
+      const email =
+        userEmail || dbUser?.email || req.body.email || "unknown@example.com";
 
       const data = insertMemberSchema.parse({
         ...req.body,
         userId: user.id,
         email,
-        name: req.body.name || `${user.firstName || user.claims?.first_name || ""} ${user.lastName || user.claims?.last_name || ""}`.trim() || "Anonymous",
+        name:
+          req.body.name ||
+          `${user.firstName || user.claims?.first_name || ""} ${user.lastName || user.claims?.last_name || ""}`.trim() ||
+          "Anonymous",
       });
 
       const member = await storage.createMember(data);
@@ -308,12 +376,14 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
       if (!requireMember(req as any, res)) return;
       const members = await storage.getApprovedMembers();
       const currentMember = getMember(req);
-      
-      res.json(members.map((m) => ({
-        ...m,
-        isFriend: false,
-        friendshipStatus: null,
-      })));
+
+      res.json(
+        members.map((m) => ({
+          ...m,
+          isFriend: false,
+          friendshipStatus: null,
+        })),
+      );
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -334,7 +404,7 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
     try {
       if (!requireMember(req as any, res)) return;
       const member = getMember(req);
-      
+
       const data = insertPostSchema.parse({
         ...req.body,
         authorId: member.id,
@@ -394,7 +464,8 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
           messages: [
             {
               role: "system",
-              content: "You are a helpful assistant that creates brief, engaging summaries of discussion topics. Keep summaries under 100 words.",
+              content:
+                "You are a helpful assistant that creates brief, engaging summaries of discussion topics. Keep summaries under 100 words.",
             },
             {
               role: "user",
@@ -625,7 +696,11 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
       const { name, memberIds, isGroup } = req.body;
       const allMemberIds = Array.from(new Set([member.id, ...memberIds]));
 
-      const room = await storage.createChatRoom(name, allMemberIds, isGroup || false);
+      const room = await storage.createChatRoom(
+        name,
+        allMemberIds,
+        isGroup || false,
+      );
       res.json(room);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -644,7 +719,7 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
           rollNumber: member.rollNumber,
           department: member.department,
           createdAt: member.createdAt,
-        }))
+        })),
       );
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -654,7 +729,10 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
   app.post("/api/admin/approve/:id", async (req, res) => {
     try {
       if (!requireAdmin(req as any, res)) return;
-      const member = await storage.updateMemberStatus(req.params.id, "approved");
+      const member = await storage.updateMemberStatus(
+        req.params.id,
+        "approved",
+      );
       res.json(member);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -664,7 +742,10 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
   app.post("/api/admin/reject/:id", async (req, res) => {
     try {
       if (!requireAdmin(req as any, res)) return;
-      const member = await storage.updateMemberStatus(req.params.id, "rejected");
+      const member = await storage.updateMemberStatus(
+        req.params.id,
+        "rejected",
+      );
       res.json(member);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -695,7 +776,10 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
   app.post("/api/admin/members/:id/approve", async (req, res) => {
     try {
       if (!requireAdmin(req as any, res)) return;
-      const member = await storage.updateMemberStatus(req.params.id, "approved");
+      const member = await storage.updateMemberStatus(
+        req.params.id,
+        "approved",
+      );
       res.json(member);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -705,7 +789,10 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
   app.post("/api/admin/members/:id/reject", async (req, res) => {
     try {
       if (!requireAdmin(req as any, res)) return;
-      const member = await storage.updateMemberStatus(req.params.id, "rejected");
+      const member = await storage.updateMemberStatus(
+        req.params.id,
+        "rejected",
+      );
       res.json(member);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
