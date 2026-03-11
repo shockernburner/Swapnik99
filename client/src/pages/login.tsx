@@ -43,7 +43,13 @@ export default function LoginPage({ onSuccess }: { onSuccess?: () => void }) {
     },
     onError: (error: any) => {
       const message = error.message || "Login failed";
-      if (message.includes("notRegistered") || error.notRegistered) {
+      if (message.includes("awaiting admin approval")) {
+        toast({
+          title: "Approval required",
+          description: "Your account is awaiting admin approval.",
+          variant: "destructive",
+        });
+      } else if (message.includes("notRegistered") || error.notRegistered) {
         toast({
           title: "Account not found",
           description: "No account exists with this email. Please register first.",

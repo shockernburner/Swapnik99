@@ -13,8 +13,8 @@ export const sessions = pgTable(
   (table) => [index("IDX_session_expire").on(table.expire)]
 );
 
-export const userRoleEnum = pgEnum("user_role", ["admin", "member"]);
-export const userStatusEnum = pgEnum("user_status", ["pending", "approved", "rejected"]);
+export const userRoleEnum = pgEnum("user_role", ["user", "admin"]);
+export const userApprovalStatusEnum = pgEnum("user_approval_status", ["pending", "approved", "rejected"]);
 export const friendshipStatusEnum = pgEnum("friendship_status", ["pending", "accepted", "rejected"]);
 
 export const users = pgTable("users", {
@@ -23,6 +23,10 @@ export const users = pgTable("users", {
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
+  role: userRoleEnum("role").default("user"),
+  approvalStatus: userApprovalStatusEnum("approval_status").default("pending"),
+  rollNumber: varchar("roll_number"),
+  department: varchar("department"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -42,8 +46,8 @@ export const members = pgTable("members", {
   company: varchar("company"),
   location: varchar("location"),
   phone: varchar("phone"),
-  role: userRoleEnum("role").default("member"),
-  status: userStatusEnum("status").default("pending"),
+  role: userRoleEnum("role").default("user"),
+  approvalStatus: userApprovalStatusEnum("approval_status").default("pending"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

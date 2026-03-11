@@ -23,7 +23,7 @@ function requireMember(req: any, res: any): boolean {
     res.status(401).json({ message: "Please complete your profile" });
     return false;
   }
-  if (member.status !== "approved") {
+  if (member.approvalStatus !== "approved") {
     res.status(403).json({ message: "Your membership is pending approval" });
     return false;
   }
@@ -62,10 +62,14 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
         return res.status(400).json({ message: "An account with this email already exists" });
       }
 
+      const normalizedEmail = email.toLowerCase();
+      const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase();
+      const isBootstrapAdmin = !!adminEmail && normalizedEmail === adminEmail;
+
       const hashedPassword = await hashPassword(password);
 
       const member = await storage.createMember({
-        email: email.toLowerCase(),
+        email: normalizedEmail,
         password: hashedPassword,
         name,
         rollNumber: rollNumber || null,
@@ -75,6 +79,8 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
         company: company || null,
         phone: phone || null,
         bio: bio || null,
+        role: isBootstrapAdmin ? "admin" : "user",
+        approvalStatus: isBootstrapAdmin ? "approved" : "pending",
       });
 
       // Set session
@@ -107,6 +113,10 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
       const isValid = await verifyPassword(password, member.password);
       if (!isValid) {
         return res.status(401).json({ message: "Invalid email or password" });
+      }
+
+      if (member.approvalStatus !== "approved") {
+        return res.status(403).json({ message: "Your account is awaiting admin approval." });
       }
 
       // Set session
@@ -622,6 +632,46 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
     }
   });
 
+  app.get("/api/admin/pending-users", async (req, res) => {
+    try {
+      if (!requireAdmin(req as any, res)) return;
+      const members = await storage.getPendingMembers();
+      res.json(
+        members.map((member) => ({
+          id: member.id,
+          name: member.name,
+          email: member.email,
+          rollNumber: member.rollNumber,
+          department: member.department,
+          createdAt: member.createdAt,
+        }))
+      );
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/admin/approve/:id", async (req, res) => {
+    try {
+      if (!requireAdmin(req as any, res)) return;
+      const member = await storage.updateMemberStatus(req.params.id, "approved");
+      res.json(member);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/admin/reject/:id", async (req, res) => {
+    try {
+      if (!requireAdmin(req as any, res)) return;
+      const member = await storage.updateMemberStatus(req.params.id, "rejected");
+      res.json(member);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Backward-compatible aliases for existing clients.
   app.get("/api/admin/pending-members", async (req, res) => {
     try {
       if (!requireAdmin(req as any, res)) return;
@@ -675,7 +725,7 @@ export async function registerRoutes(server: Server, app: Express): Promise<void
   app.post("/api/admin/members/:id/remove-admin", async (req, res) => {
     try {
       if (!requireAdmin(req as any, res)) return;
-      const member = await storage.updateMemberRole(req.params.id, "member");
+      const member = await storage.updateMemberRole(req.params.id, "user");
       res.json(member);
     } catch (error: any) {
       res.status(400).json({ message: error.message });

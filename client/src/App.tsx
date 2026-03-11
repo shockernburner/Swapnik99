@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
@@ -20,18 +21,28 @@ import EventsPage from "@/pages/events";
 import BusinessPage from "@/pages/business";
 import MembersPage from "@/pages/members";
 import AccountingPage from "@/pages/accounting";
-import AdminPage from "@/pages/admin";
+import AdminDashboardPage from "@/pages/AdminDashboard";
 import PendingApprovalPage from "@/pages/pending-approval";
 
 interface Member {
   id: string;
   email: string;
   name: string;
-  status: "pending" | "approved" | "rejected";
-  role: "member" | "admin";
+  approvalStatus: "pending" | "approved" | "rejected";
+  role: "user" | "admin";
 }
 
-function AuthenticatedRouter() {
+function RedirectHome() {
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    setLocation("/");
+  }, [setLocation]);
+
+  return null;
+}
+
+function AuthenticatedRouter({ member }: { member: Member }) {
   return (
     <Switch>
       <Route path="/" component={FeedPage} />
@@ -41,13 +52,15 @@ function AuthenticatedRouter() {
       <Route path="/business" component={BusinessPage} />
       <Route path="/members" component={MembersPage} />
       <Route path="/accounting" component={AccountingPage} />
-      <Route path="/admin" component={AdminPage} />
+      <Route path="/admin">
+        {() => (member.role === "admin" ? <AdminDashboardPage /> : <RedirectHome />)}
+      </Route>
       <Route component={NotFound} />
     </Switch>
   );
 }
 
-function AuthenticatedApp() {
+function AuthenticatedApp({ member }: { member: Member }) {
   const style = {
     "--sidebar-width": "16rem",
     "--sidebar-width-icon": "3rem",
@@ -56,14 +69,14 @@ function AuthenticatedApp() {
   return (
     <SidebarProvider style={style as React.CSSProperties}>
       <div className="flex h-screen w-full">
-        <AppSidebar />
+        <AppSidebar member={member} />
         <div className="flex flex-col flex-1 overflow-hidden">
           <header className="flex items-center justify-between h-14 px-4 border-b bg-background/80 backdrop-blur-sm">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
             <ThemeToggle />
           </header>
           <main className="flex-1 overflow-auto">
-            <AuthenticatedRouter />
+            <AuthenticatedRouter member={member} />
           </main>
         </div>
       </div>
@@ -85,8 +98,6 @@ function UnauthenticatedRouter() {
 }
 
 function AppContent() {
-  const [location] = useLocation();
-
   const { data: member, isLoading, error } = useQuery<Member>({
     queryKey: ["/api/auth/me"],
     retry: false,
@@ -110,12 +121,12 @@ function AppContent() {
   }
 
   // Authenticated but pending approval
-  if (member.status === "pending") {
+  if (member.approvalStatus === "pending") {
     return <PendingApprovalPage />;
   }
 
   // Authenticated but rejected
-  if (member.status === "rejected") {
+  if (member.approvalStatus === "rejected") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <div className="text-center space-y-4">
@@ -130,7 +141,7 @@ function AppContent() {
   }
 
   // Fully authenticated and approved
-  return <AuthenticatedApp />;
+  return <AuthenticatedApp member={member} />;
 }
 
 function App() {

@@ -19,8 +19,8 @@ export interface IStorage {
   getMemberById(id: string): Promise<Member | undefined>;
   getMemberByEmail(email: string): Promise<Member | undefined>;
   createMember(data: InsertMember): Promise<Member>;
-  updateMemberStatus(id: string, status: "approved" | "rejected"): Promise<Member | undefined>;
-  updateMemberRole(id: string, role: "admin" | "member"): Promise<Member | undefined>;
+  updateMemberStatus(id: string, approvalStatus: "approved" | "rejected"): Promise<Member | undefined>;
+  updateMemberRole(id: string, role: "admin" | "user"): Promise<Member | undefined>;
   getPendingMembers(): Promise<Member[]>;
   getApprovedMembers(): Promise<Member[]>;
   getAllMembers(): Promise<Member[]>;
@@ -89,16 +89,16 @@ export class DatabaseStorage implements IStorage {
     return member;
   }
 
-  async updateMemberStatus(id: string, status: "approved" | "rejected"): Promise<Member | undefined> {
+  async updateMemberStatus(id: string, approvalStatus: "approved" | "rejected"): Promise<Member | undefined> {
     const [member] = await db
       .update(members)
-      .set({ status, updatedAt: new Date() })
+      .set({ approvalStatus, updatedAt: new Date() })
       .where(eq(members.id, id))
       .returning();
     return member;
   }
 
-  async updateMemberRole(id: string, role: "admin" | "member"): Promise<Member | undefined> {
+  async updateMemberRole(id: string, role: "admin" | "user"): Promise<Member | undefined> {
     const [member] = await db
       .update(members)
       .set({ role, updatedAt: new Date() })
@@ -108,11 +108,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPendingMembers(): Promise<Member[]> {
-    return db.select().from(members).where(eq(members.status, "pending")).orderBy(desc(members.createdAt));
+    return db.select().from(members).where(eq(members.approvalStatus, "pending")).orderBy(desc(members.createdAt));
   }
 
   async getApprovedMembers(): Promise<Member[]> {
-    return db.select().from(members).where(eq(members.status, "approved")).orderBy(members.name);
+    return db.select().from(members).where(eq(members.approvalStatus, "approved")).orderBy(members.name);
   }
 
   async getAllMembers(): Promise<Member[]> {
