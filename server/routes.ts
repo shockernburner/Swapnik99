@@ -140,12 +140,10 @@ export async function registerRoutes(
       }
 
       if (!member.password) {
-        return res
-          .status(401)
-          .json({
-            message:
-              "Please use the social login option you originally registered with",
-          });
+        return res.status(401).json({
+          message:
+            "Please use the social login option you originally registered with",
+        });
       }
 
       const isValid = await verifyPassword(password, member.password);
@@ -206,24 +204,22 @@ export async function registerRoutes(
       }
 
       const member = await storage.getMemberByEmail(email.toLowerCase());
+
+      console.log("FORGOT PASSWORD REQUEST:", email);
+      console.log("MEMBER FOUND:", member?.id);
+
       if (!member) {
-        // Don't reveal if email exists - always return success message
         return res.json({
           message:
             "If an account exists with this email, a password reset link has been sent",
         });
       }
 
-      // Generate reset token
       const crypto = await import("crypto");
       const token = crypto.randomBytes(32).toString("hex");
       const expiresAt = new Date(Date.now() + 1000 * 60 * 60);
 
-      console.log("Creating reset token:", {
-        memberId: member.id,
-        token,
-        expiresAt,
-      });
+      console.log("CREATING RESET TOKEN");
 
       await storage.createPasswordResetToken(member.id, token, expiresAt);
 
@@ -233,11 +229,9 @@ export async function registerRoutes(
         console.log(`Password reset email sent to ${email}`);
       } catch (emailError) {
         console.error("Failed to send password reset email:", emailError);
-        return res
-          .status(500)
-          .json({
-            message: "Failed to send reset email. Please try again later.",
-          });
+        return res.status(500).json({
+          message: "Failed to send reset email. Please try again later.",
+        });
       }
 
       res.json({
