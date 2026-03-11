@@ -1,31 +1,31 @@
 // Resend email integration for Swapnik99
-import { Resend } from 'resend';
+import { Resend } from "resend";
 
-const FROM_EMAIL = 'Swapnik99 <info@swapnik99.org>';
+const FROM_EMAIL = "Swapnik99 <info@swapnik99.org>";
 
 async function getResendClient() {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
-    throw new Error('RESEND_API_KEY environment variable is not set');
+    throw new Error("RESEND_API_KEY environment variable is not set");
   }
   return new Resend(apiKey);
 }
 
-export async function sendPasswordResetEmail(toEmail: string, resetToken: string, memberName: string) {
+export async function sendPasswordResetEmail(
+  toEmail: string,
+  resetToken: string,
+  memberName: string,
+) {
   const client = await getResendClient();
-  
-  const baseUrl = process.env.REPLIT_DEV_DOMAIN 
-    ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-    : process.env.REPL_SLUG 
-    ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`
-    : 'http://localhost:5000';
-  
+
+  const baseUrl = process.env.APP_URL || "https://swapnik99.org";
+
   const resetLink = `${baseUrl}/reset-password?token=${resetToken}`;
-  
+
   const { data, error } = await client.emails.send({
     from: FROM_EMAIL,
     to: toEmail,
-    subject: 'Reset Your Swapnik99 Password',
+    subject: "Reset Your Swapnik99 Password",
     html: `
       <!DOCTYPE html>
       <html>
@@ -64,12 +64,12 @@ export async function sendPasswordResetEmail(toEmail: string, resetToken: string
         </div>
       </body>
       </html>
-    `
+    `,
   });
 
   if (error) {
-    console.error('Failed to send password reset email:', error);
-    throw new Error('Failed to send password reset email');
+    console.error("Failed to send password reset email:", error);
+    throw new Error("Failed to send password reset email");
   }
 
   return data;
