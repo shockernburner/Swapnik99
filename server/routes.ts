@@ -29,7 +29,7 @@ function requireMember(req: any, res: any): boolean {
     res.status(401).json({ message: "Please complete your profile" });
     return false;
   }
-  if (member.approvalStatus !== "approved") {
+  if (member.approval_status !== "approved") {
     res.status(403).json({ message: "Your membership is pending approval" });
     return false;
   }
