@@ -29,7 +29,7 @@ function requireMember(req: any, res: any): boolean {
     res.status(401).json({ message: "Please complete your profile" });
     return false;
   }
-  if (member.approval_status !== "approved") {
+  if ((member.approvalStatus || member.approval_status) !== "approved") {
     res.status(403).json({ message: "Your membership is pending approval" });
     return false;
   }
@@ -151,7 +151,7 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Invalid email or password" });
       }
 
-      if (member.approval_status !== "approved") {
+      if ((member.approvalStatus || member.approval_status) !== "approved") {
         return res
           .status(403)
           .json({ message: "Your account is awaiting admin approval." });
