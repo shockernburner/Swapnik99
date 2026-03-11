@@ -20,8 +20,9 @@ import DiscussionsPage from "@/pages/discussions";
 import EventsPage from "@/pages/events";
 import BusinessPage from "@/pages/business";
 import MembersPage from "@/pages/members";
+import MemberProfilePage from "@/pages/MemberProfile";
 import AccountingPage from "@/pages/accounting";
-import AdminDashboardPage from "@/pages/AdminDashboard";
+import AdminPage from "@/pages/admin";
 import PendingApprovalPage from "@/pages/pending-approval";
 
 interface Member {
@@ -51,9 +52,10 @@ function AuthenticatedRouter({ member }: { member: Member }) {
       <Route path="/events" component={EventsPage} />
       <Route path="/business" component={BusinessPage} />
       <Route path="/members" component={MembersPage} />
+      <Route path="/members/:id" component={MemberProfilePage} />
       <Route path="/accounting" component={AccountingPage} />
       <Route path="/admin">
-        {() => (member.role === "admin" ? <AdminDashboardPage /> : <RedirectHome />)}
+        {() => (member.role === "admin" ? <AdminPage /> : <RedirectHome />)}
       </Route>
       <Route component={NotFound} />
     </Switch>

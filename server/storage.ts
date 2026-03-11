@@ -10,7 +10,7 @@ import {
   type BusinessListing, type ChatRoom, type ChatMessage, type AccountingDocument,
   type InsertPost, type InsertDiscussion, type InsertEvent, type InsertBusinessListing,
   type InsertMember, type InsertChatMessage, type PostComment, type DiscussionReply,
-  type InsertComment, type InsertDiscussionReply
+  type InsertComment, type InsertDiscussionReply, type Friendship
 } from "@shared/schema";
 
 export interface IStorage {
@@ -24,6 +24,14 @@ export interface IStorage {
   getPendingMembers(): Promise<Member[]>;
   getApprovedMembers(): Promise<Member[]>;
   getAllMembers(): Promise<Member[]>;
+  getFriendshipBetweenMembers(memberAId: string, memberBId: string): Promise<Friendship | undefined>;
+  createFriendRequest(requesterId: string, addresseeId: string): Promise<Friendship>;
+  acceptFriendRequest(requesterId: string, addresseeId: string): Promise<Friendship | undefined>;
+  removeFriendship(memberAId: string, memberBId: string): Promise<void>;
+  getFriends(memberId: string): Promise<Member[]>;
+  getMemberProfile(memberId: string, currentMemberId?: string): Promise<{ member?: Member; friendCount: number; mutualFriendCount: number; friends: Member[] }>;
+  updateMemberPresence(memberId: string, isOnline: boolean): Promise<void>;
+  markInactiveMembersOffline(cutoffMinutes: number): Promise<number>;
 
   getPosts(memberId?: string): Promise<(Post & { author: Member; likesCount: number; commentsCount: number; isLiked: boolean })[]>;
   createPost(data: InsertPost): Promise<Post>;
@@ -56,6 +64,7 @@ export interface IStorage {
   getChatRoomMessages(roomId: number): Promise<(ChatMessage & { sender: Member })[]>;
   createChatMessage(data: InsertChatMessage): Promise<ChatMessage>;
   createChatRoom(name: string, memberIds: string[], isGroup: boolean): Promise<ChatRoom>;
+  createDirectChatRoom(memberAId: string, memberBId: string): Promise<ChatRoom>;
 
   createPasswordResetToken(memberId: string, token: string, expiresAt: Date): Promise<void>;
   getPasswordResetToken(token: string): Promise<{ memberId: string; expiresAt: Date; used: boolean | null } | undefined>;
@@ -117,6 +126,159 @@ export class DatabaseStorage implements IStorage {
 
   async getAllMembers(): Promise<Member[]> {
     return db.select().from(members).orderBy(desc(members.createdAt));
+  }
+
+  async getFriendshipBetweenMembers(memberAId: string, memberBId: string): Promise<Friendship | undefined> {
+    const [friendship] = await db
+      .select()
+      .from(friendships)
+      .where(
+        or(
+          and(eq(friendships.requesterId, memberAId), eq(friendships.addresseeId, memberBId)),
+          and(eq(friendships.requesterId, memberBId), eq(friendships.addresseeId, memberAId)),
+        ),
+      )
+      .limit(1);
+
+    return friendship;
+  }
+
+  async createFriendRequest(requesterId: string, addresseeId: string): Promise<Friendship> {
+    if (requesterId === addresseeId) {
+      throw new Error("You cannot send a friend request to yourself");
+    }
+
+    const existing = await this.getFriendshipBetweenMembers(requesterId, addresseeId);
+    if (existing) {
+      if (existing.status === "accepted") {
+        throw new Error("You are already friends");
+      }
+      if (existing.status === "pending") {
+        throw new Error("A friend request already exists");
+      }
+      if (existing.status === "blocked") {
+        throw new Error("Friend request is blocked");
+      }
+    }
+
+    const [friendship] = await db
+      .insert(friendships)
+      .values({
+        requesterId,
+        addresseeId,
+        status: "pending",
+      })
+      .returning();
+
+    return friendship;
+  }
+
+  async acceptFriendRequest(requesterId: string, addresseeId: string): Promise<Friendship | undefined> {
+    const [friendship] = await db
+      .update(friendships)
+      .set({ status: "accepted", updatedAt: new Date() })
+      .where(
+        and(
+          eq(friendships.requesterId, requesterId),
+          eq(friendships.addresseeId, addresseeId),
+          eq(friendships.status, "pending"),
+        ),
+      )
+      .returning();
+
+    if (friendship) {
+      await this.createDirectChatRoom(requesterId, addresseeId);
+    }
+
+    return friendship;
+  }
+
+  async removeFriendship(memberAId: string, memberBId: string): Promise<void> {
+    await db
+      .delete(friendships)
+      .where(
+        or(
+          and(eq(friendships.requesterId, memberAId), eq(friendships.addresseeId, memberBId)),
+          and(eq(friendships.requesterId, memberBId), eq(friendships.addresseeId, memberAId)),
+        ),
+      );
+  }
+
+  async getFriends(memberId: string): Promise<Member[]> {
+    const acceptedFriendships = await db
+      .select()
+      .from(friendships)
+      .where(
+        and(
+          eq(friendships.status, "accepted"),
+          or(eq(friendships.requesterId, memberId), eq(friendships.addresseeId, memberId)),
+        ),
+      );
+
+    if (acceptedFriendships.length === 0) {
+      return [];
+    }
+
+    const friendIds = acceptedFriendships.map((friendship) =>
+      friendship.requesterId === memberId ? friendship.addresseeId : friendship.requesterId,
+    );
+
+    return db
+      .select()
+      .from(members)
+      .where(sql`${members.id} = ANY(${friendIds})`)
+      .orderBy(members.name);
+  }
+
+  async getMemberProfile(memberId: string, currentMemberId?: string): Promise<{ member?: Member; friendCount: number; mutualFriendCount: number; friends: Member[] }> {
+    const member = await this.getMemberById(memberId);
+    if (!member) {
+      return { member: undefined, friendCount: 0, mutualFriendCount: 0, friends: [] };
+    }
+
+    const friends = await this.getFriends(memberId);
+    const friendCount = friends.length;
+
+    let mutualFriendCount = 0;
+    if (currentMemberId) {
+      const currentFriends = await this.getFriends(currentMemberId);
+      const currentFriendIds = new Set(currentFriends.map((friend) => friend.id));
+      mutualFriendCount = friends.filter((friend) => currentFriendIds.has(friend.id)).length;
+    }
+
+    return {
+      member,
+      friendCount,
+      mutualFriendCount,
+      friends,
+    };
+  }
+
+  async updateMemberPresence(memberId: string, isOnline: boolean): Promise<void> {
+    await db
+      .update(members)
+      .set({
+        isOnline,
+        lastSeen: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(members.id, memberId));
+  }
+
+  async markInactiveMembersOffline(cutoffMinutes: number): Promise<number> {
+    const cutoff = new Date(Date.now() - cutoffMinutes * 60 * 1000);
+    const updated = await db
+      .update(members)
+      .set({ isOnline: false, updatedAt: new Date() })
+      .where(
+        and(
+          eq(members.isOnline, true),
+          sql`${members.lastSeen} < ${cutoff}`,
+        ),
+      )
+      .returning({ id: members.id });
+
+    return updated.length;
   }
 
   async getPosts(currentMemberId?: string): Promise<(Post & { author: Member; likesCount: number; commentsCount: number; isLiked: boolean })[]> {
@@ -421,6 +583,40 @@ export class DatabaseStorage implements IStorage {
     );
 
     return room;
+  }
+
+  async createDirectChatRoom(memberAId: string, memberBId: string): Promise<ChatRoom> {
+    const pairRoomIds = await db
+      .selectDistinct({ roomId: chatRoomMembers.roomId })
+      .from(chatRoomMembers)
+      .where(or(eq(chatRoomMembers.memberId, memberAId), eq(chatRoomMembers.memberId, memberBId)));
+
+    for (const pairRoom of pairRoomIds) {
+      const [room] = await db
+        .select()
+        .from(chatRooms)
+        .where(and(eq(chatRooms.id, pairRoom.roomId), eq(chatRooms.isGroup, false)));
+
+      if (!room) {
+        continue;
+      }
+
+      const participants = await db
+        .select({ memberId: chatRoomMembers.memberId })
+        .from(chatRoomMembers)
+        .where(eq(chatRoomMembers.roomId, room.id));
+
+      const participantIds = participants.map((participant) => participant.memberId);
+      const hasBothMembers = participantIds.includes(memberAId) && participantIds.includes(memberBId);
+
+      if (hasBothMembers && participantIds.length === 2) {
+        return room;
+      }
+    }
+
+    const otherMember = await this.getMemberById(memberBId);
+    const roomName = otherMember?.name || "Direct Chat";
+    return this.createChatRoom(roomName, [memberAId, memberBId], false);
   }
 
   async createPasswordResetToken(memberId: string, token: string, expiresAt: Date): Promise<void> {

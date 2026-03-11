@@ -1,5 +1,6 @@
 // Resend email integration for Swapnik99
 import { Resend } from "resend";
+import type { Member } from "@shared/schema";
 
 const FROM_EMAIL = "Swapnik99 <info@swapnik99.org>";
 
@@ -70,6 +71,64 @@ export async function sendPasswordResetEmail(
   if (error) {
     console.error("Failed to send password reset email:", error);
     throw new Error("Failed to send password reset email");
+  }
+
+  return data;
+}
+
+export async function sendMembershipApprovedEmail(member: Pick<Member, "name" | "email">) {
+  const client = await getResendClient();
+
+  const { data, error } = await client.emails.send({
+    from: FROM_EMAIL,
+    to: member.email,
+    subject: "Your Swapnik99 Membership Has Been Approved",
+    text: `Hello ${member.name},
+
+Your membership in the Swapnik99 BUET '99 Alumni Network has been approved.
+
+You can now log in and connect with your batchmates.
+
+Login here:
+https://swapnik99.org
+
+Best regards
+Swapnik99 Alumni Network`,
+  });
+
+  if (error) {
+    console.error("Failed to send membership approved email:", error);
+    throw new Error("Failed to send membership approved email");
+  }
+
+  return data;
+}
+
+export async function sendFriendRequestEmail(
+  sender: Pick<Member, "name" | "email">,
+  receiver: Pick<Member, "name" | "email">,
+) {
+  const client = await getResendClient();
+
+  const { data, error } = await client.emails.send({
+    from: FROM_EMAIL,
+    to: receiver.email,
+    subject: "New Friend Request on Swapnik99",
+    text: `Hello ${receiver.name},
+
+${sender.name} has sent you a friend request on Swapnik99.
+
+Log in to accept or decline the request.
+
+https://swapnik99.org
+
+Best regards
+Swapnik99 Alumni Network`,
+  });
+
+  if (error) {
+    console.error("Failed to send friend request email:", error);
+    throw new Error("Failed to send friend request email");
   }
 
   return data;

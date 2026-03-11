@@ -1,10 +1,13 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { formatDistanceToNow } from "date-fns";
 import { Search, MapPin, Briefcase, GraduationCap, UserPlus, MessageCircle, Users } from "lucide-react";
 
 interface MemberProfile {
@@ -17,13 +20,51 @@ interface MemberProfile {
   bio?: string;
   isFriend: boolean;
   friendshipStatus?: string;
+  friendshipDirection?: "incoming" | "outgoing" | null;
+  isOnline?: boolean | null;
+  lastSeen?: string | null;
 }
 
 export default function MembersPage() {
   const [search, setSearch] = useState("");
+  const [, setLocation] = useLocation();
 
   const { data: members, isLoading } = useQuery<MemberProfile[]>({
     queryKey: ["/api/members", search],
+  });
+
+  const sendFriendRequestMutation = useMutation({
+    mutationFn: async (memberId: string) => apiRequest("POST", `/api/friends/request/${memberId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/members", search] });
+      queryClient.invalidateQueries({ queryKey: ["/api/friends"] });
+    },
+  });
+
+  const acceptFriendRequestMutation = useMutation({
+    mutationFn: async (memberId: string) => {
+      const response = await apiRequest("POST", `/api/friends/accept/${memberId}`);
+      return response.json() as Promise<{ room?: { id: number } }>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/members", search] });
+      queryClient.invalidateQueries({ queryKey: ["/api/friends"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/chat/rooms"] });
+      if (data?.room?.id) {
+        setLocation(`/chat?room=${data.room.id}`);
+      }
+    },
+  });
+
+  const startDirectChatMutation = useMutation({
+    mutationFn: async (memberId: string) => {
+      const response = await apiRequest("POST", `/api/chat/direct/${memberId}`);
+      return response.json() as Promise<{ id: number }>;
+    },
+    onSuccess: (room) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/chat/rooms"] });
+      setLocation(`/chat?room=${room.id}`);
+    },
   });
 
   const filteredMembers = members?.filter(
@@ -101,19 +142,62 @@ export default function MembersPage() {
                   {member.bio && (
                     <p className="text-sm text-muted-foreground mt-3 line-clamp-2">{member.bio}</p>
                   )}
+                  <div className="mt-3">
+                    {member.isOnline ? (
+                      <Badge variant="secondary">Online</Badge>
+                    ) : member.lastSeen ? (
+                      <p className="text-xs text-muted-foreground">
+                        Last seen {formatDistanceToNow(new Date(member.lastSeen), { addSuffix: true })}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Offline</p>
+                    )}
+                  </div>
                   <div className="flex items-center gap-2 mt-4">
                     {member.isFriend ? (
                       <Badge variant="secondary">Friends</Badge>
                     ) : member.friendshipStatus === "pending" ? (
-                      <Badge variant="outline">Request Sent</Badge>
+                      member.friendshipDirection === "incoming" ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => acceptFriendRequestMutation.mutate(member.id)}
+                          disabled={acceptFriendRequestMutation.isPending}
+                          data-testid={`button-accept-friend-${member.id}`}
+                        >
+                          Accept Request
+                        </Button>
+                      ) : (
+                        <Badge variant="outline">Request Sent</Badge>
+                      )
                     ) : (
-                      <Button size="sm" variant="outline" data-testid={`button-add-friend-${member.id}`}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => sendFriendRequestMutation.mutate(member.id)}
+                        disabled={sendFriendRequestMutation.isPending}
+                        data-testid={`button-add-friend-${member.id}`}
+                      >
                         <UserPlus className="h-4 w-4 mr-1" />
                         Add Friend
                       </Button>
                     )}
-                    <Button size="sm" variant="ghost" data-testid={`button-message-${member.id}`}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => startDirectChatMutation.mutate(member.id)}
+                      disabled={startDirectChatMutation.isPending}
+                      data-testid={`button-message-${member.id}`}
+                    >
                       <MessageCircle className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setLocation(`/members/${member.id}`)}
+                      data-testid={`button-view-profile-${member.id}`}
+                    >
+                      View
                     </Button>
                   </div>
                 </div>

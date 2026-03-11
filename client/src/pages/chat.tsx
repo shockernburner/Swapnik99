@@ -39,6 +39,9 @@ export default function ChatPage() {
   const [message, setMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
+  const queryParams = new URLSearchParams(window.location.search);
+  const roomIdFromQuery = queryParams.get("room");
+  const memberIdFromQuery = queryParams.get("memberId");
 
   const { data: rooms, isLoading: roomsLoading } = useQuery<ChatRoom[]>({
     queryKey: ["/api/chat/rooms"],
@@ -60,6 +63,18 @@ export default function ChatPage() {
     },
   });
 
+  const createDirectRoomMutation = useMutation({
+    mutationFn: async (memberId: string) => {
+      const response = await apiRequest("POST", `/api/chat/direct/${memberId}`);
+      return response.json() as Promise<{ id: number }>;
+    },
+    onSuccess: (room) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/chat/rooms"] });
+      setSelectedRoom(room.id);
+      window.history.replaceState({}, "", `/chat?room=${room.id}`);
+    },
+  });
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -72,6 +87,28 @@ export default function ChatPage() {
       return () => clearInterval(interval);
     }
   }, [selectedRoom, refetchMessages]);
+
+  useEffect(() => {
+    if (!rooms || rooms.length === 0) {
+      return;
+    }
+
+    if (roomIdFromQuery) {
+      const targetRoomId = Number(roomIdFromQuery);
+      if (!Number.isNaN(targetRoomId)) {
+        const existingRoom = rooms.find((room) => room.id === targetRoomId);
+        if (existingRoom) {
+          setSelectedRoom(existingRoom.id);
+        }
+      }
+    }
+  }, [rooms, roomIdFromQuery]);
+
+  useEffect(() => {
+    if (memberIdFromQuery && !createDirectRoomMutation.isPending) {
+      createDirectRoomMutation.mutate(memberIdFromQuery);
+    }
+  }, [memberIdFromQuery]);
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();

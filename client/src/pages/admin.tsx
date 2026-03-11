@@ -31,8 +31,8 @@ interface MemberForAdmin {
   email: string;
   rollNumber?: string;
   department?: string;
-  role: string;
-  status: string;
+  role: "user" | "admin";
+  approvalStatus: "pending" | "approved" | "rejected";
   createdAt: string;
 }
 
@@ -119,7 +119,7 @@ export default function AdminPage() {
     uploadMutation.mutate(formData);
   };
 
-  const approvedMembers = allMembers?.filter((m) => m.status === "approved") || [];
+  const approvedMembers = allMembers?.filter((m) => m.approvalStatus === "approved") || [];
   const pendingCount = pendingMembers?.length || 0;
 
   return (

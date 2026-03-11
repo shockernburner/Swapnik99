@@ -15,7 +15,7 @@ export const sessions = pgTable(
 
 export const userRoleEnum = pgEnum("user_role", ["user", "admin"]);
 export const userApprovalStatusEnum = pgEnum("user_approval_status", ["pending", "approved", "rejected"]);
-export const friendshipStatusEnum = pgEnum("friendship_status", ["pending", "accepted", "rejected"]);
+export const friendshipStatusEnum = pgEnum("friendship_status", ["pending", "accepted", "blocked"]);
 
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -46,6 +46,8 @@ export const members = pgTable("members", {
   company: varchar("company"),
   location: varchar("location"),
   phone: varchar("phone"),
+  lastSeen: timestamp("last_seen"),
+  isOnline: boolean("is_online").default(false),
   role: userRoleEnum("role").default("user"),
   approvalStatus: userApprovalStatusEnum("approval_status").default("pending"),
   createdAt: timestamp("created_at").defaultNow(),

@@ -12,7 +12,11 @@ import OpenAI from "openai";
 import { setupAuth } from "./replit_integrations/auth";
 import { registerAuthRoutes } from "./replit_integrations/auth/routes";
 import { hashPassword, verifyPassword } from "./auth";
-import { sendPasswordResetEmail } from "./email";
+import {
+  sendPasswordResetEmail,
+  sendMembershipApprovedEmail,
+  sendFriendRequestEmail,
+} from "./email";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -52,6 +56,12 @@ export async function registerRoutes(
 ): Promise<void> {
   await setupAuth(app);
   registerAuthRoutes(app);
+
+  setInterval(() => {
+    storage.markInactiveMembersOffline(5).catch((error) => {
+      console.error("Failed to mark inactive members offline:", error);
+    });
+  }, 60 * 1000);
 
   // Custom email/password authentication endpoints
   app.post("/api/auth/register", async (req, res) => {
@@ -304,12 +314,33 @@ export async function registerRoutes(
     if (memberId) {
       const member = await storage.getMemberById(memberId);
       (req as any).member = member;
+      if (member) {
+        storage.updateMemberPresence(member.id, true).catch((error) => {
+          console.error("Failed to update member presence:", error);
+        });
+      }
     } else if ((req as any).user) {
       // Fallback to Replit Auth
       const member = await storage.getMemberByUserId((req as any).user.id);
       (req as any).member = member;
+      if (member) {
+        storage.updateMemberPresence(member.id, true).catch((error) => {
+          console.error("Failed to update member presence:", error);
+        });
+      }
     }
     next();
+  });
+
+  app.post("/api/presence/ping", async (req, res) => {
+    try {
+      if (!requireMember(req as any, res)) return;
+      const member = getMember(req);
+      await storage.updateMemberPresence(member.id, true);
+      res.json({ success: true, lastSeen: new Date().toISOString() });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
   });
 
   app.get("/api/member/me", async (req, res) => {
@@ -371,15 +402,121 @@ export async function registerRoutes(
       const members = await storage.getApprovedMembers();
       const currentMember = getMember(req);
 
-      res.json(
-        members.map((m) => ({
-          ...m,
-          isFriend: false,
-          friendshipStatus: null,
-        })),
+      const enrichedMembers = await Promise.all(
+        members
+          .filter((member) => member.id !== currentMember.id)
+          .map(async (member) => {
+            const friendship = await storage.getFriendshipBetweenMembers(
+              currentMember.id,
+              member.id,
+            );
+
+            return {
+              ...member,
+              isFriend: friendship?.status === "accepted",
+              friendshipStatus: friendship?.status || null,
+              friendshipDirection:
+                friendship?.status === "pending"
+                  ? friendship.requesterId === currentMember.id
+                    ? "outgoing"
+                    : "incoming"
+                  : null,
+            };
+          }),
       );
+
+      res.json(enrichedMembers);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/members/:id", async (req, res) => {
+    try {
+      if (!requireMember(req as any, res)) return;
+
+      const currentMember = getMember(req);
+      const profile = await storage.getMemberProfile(req.params.id, currentMember.id);
+
+      if (!profile.member || profile.member.approvalStatus !== "approved") {
+        return res.status(404).json({ message: "Member not found" });
+      }
+
+      res.json({
+        member: profile.member,
+        friends: profile.friends,
+        friend_count: profile.friendCount,
+        mutual_friend_count: profile.mutualFriendCount,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/friends", async (req, res) => {
+    try {
+      if (!requireMember(req as any, res)) return;
+      const member = getMember(req);
+      const friends = await storage.getFriends(member.id);
+      res.json(friends);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/friends/request/:memberId", async (req, res) => {
+    try {
+      if (!requireMember(req as any, res)) return;
+
+      const sender = getMember(req);
+      const recipient = await storage.getMemberById(req.params.memberId);
+
+      if (!recipient || recipient.approvalStatus !== "approved") {
+        return res.status(404).json({ message: "Member not found" });
+      }
+
+      const friendship = await storage.createFriendRequest(sender.id, recipient.id);
+
+      sendFriendRequestEmail(sender, recipient).catch((emailError) => {
+        console.error("Failed to send friend request email:", emailError);
+      });
+
+      res.json(friendship);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/friends/accept/:memberId", async (req, res) => {
+    try {
+      if (!requireMember(req as any, res)) return;
+
+      const currentMember = getMember(req);
+      const friendship = await storage.acceptFriendRequest(
+        req.params.memberId,
+        currentMember.id,
+      );
+
+      if (!friendship) {
+        return res.status(404).json({ message: "Friend request not found" });
+      }
+
+      const room = await storage.createDirectChatRoom(req.params.memberId, currentMember.id);
+      res.json({ friendship, room });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/friends/:memberId", async (req, res) => {
+    try {
+      if (!requireMember(req as any, res)) return;
+
+      const currentMember = getMember(req);
+      await storage.removeFriendship(currentMember.id, req.params.memberId);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
     }
   });
 
@@ -701,6 +838,23 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/chat/direct/:memberId", async (req, res) => {
+    try {
+      if (!requireMember(req as any, res)) return;
+      const member = getMember(req);
+      const otherMember = await storage.getMemberById(req.params.memberId);
+
+      if (!otherMember || otherMember.approvalStatus !== "approved") {
+        return res.status(404).json({ message: "Member not found" });
+      }
+
+      const room = await storage.createDirectChatRoom(member.id, otherMember.id);
+      res.json(room);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
   app.get("/api/admin/pending-users", async (req, res) => {
     try {
       if (!requireAdmin(req as any, res)) return;
@@ -727,6 +881,13 @@ export async function registerRoutes(
         req.params.id,
         "approved",
       );
+
+      if (member) {
+        sendMembershipApprovedEmail(member).catch((emailError) => {
+          console.error("Failed to send membership approval email:", emailError);
+        });
+      }
+
       res.json(member);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -774,6 +935,13 @@ export async function registerRoutes(
         req.params.id,
         "approved",
       );
+
+      if (member) {
+        sendMembershipApprovedEmail(member).catch((emailError) => {
+          console.error("Failed to send membership approval email:", emailError);
+        });
+      }
+
       res.json(member);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
