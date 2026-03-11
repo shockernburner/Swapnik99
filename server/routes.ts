@@ -106,7 +106,7 @@ export async function registerRoutes(
         phone: phone || null,
         bio: bio || null,
         role: isBootstrapAdmin ? "admin" : "user",
-        approvalStatus: isBootstrapAdmin ? "approved" : "pending",
+        approval_status: isBootstrapAdmin ? "approved" : "pending",
       });
 
       // Set session
@@ -151,7 +151,7 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Invalid email or password" });
       }
 
-      if (member.approvalStatus !== "approved") {
+      if (member.approval_status !== "approved") {
         return res
           .status(403)
           .json({ message: "Your account is awaiting admin approval." });
