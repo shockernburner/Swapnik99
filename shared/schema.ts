@@ -35,6 +35,7 @@ export const members = pgTable("members", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }),
   email: varchar("email").notNull().unique(),
+  alumniEmail: varchar("alumni_email").unique(),
   password: varchar("password"),
   name: varchar("name").notNull(),
   rollNumber: varchar("roll_number"),
@@ -50,6 +51,9 @@ export const members = pgTable("members", {
   isOnline: boolean("is_online").default(false),
   role: userRoleEnum("role").default("user"),
   approvalStatus: userApprovalStatusEnum("approval_status").default("pending"),
+  mailboxProvisioned: boolean("mailbox_provisioned").default(false),
+  mailboxProvisionedAt: timestamp("mailbox_provisioned_at"),
+  mailboxProvisionError: text("mailbox_provision_error"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

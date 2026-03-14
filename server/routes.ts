@@ -14,9 +14,12 @@ import { registerAuthRoutes } from "./replit_integrations/auth/routes";
 import { hashPassword, verifyPassword } from "./auth";
 import {
   sendPasswordResetEmail,
-  sendMembershipApprovedEmail,
   sendFriendRequestEmail,
 } from "./email";
+import {
+  approveMemberWithMailbox,
+  provisionMailboxForApprovedMember,
+} from "./services/member-approval";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -91,7 +94,7 @@ export async function registerRoutes(
           .json({ message: "Password must be at least 6 characters" });
       }
 
-      const existing = await storage.getMemberByEmail(email);
+      const existing = await storage.getMemberByLoginIdentifier(email);
       if (existing) {
         return res
           .status(400)
@@ -142,7 +145,7 @@ export async function registerRoutes(
           .json({ message: "Email and password are required" });
       }
 
-      const member = await storage.getMemberByEmail(email);
+      const member = await storage.getMemberByLoginIdentifier(email);
       if (!member) {
         return res
           .status(401)
@@ -213,7 +216,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Email is required" });
       }
 
-      const member = await storage.getMemberByEmail(email.toLowerCase());
+      const member = await storage.getMemberByLoginIdentifier(email.toLowerCase());
 
       console.log("FORGOT PASSWORD REQUEST:", email);
       console.log("MEMBER FOUND:", member?.id);
@@ -877,18 +880,8 @@ export async function registerRoutes(
   app.post("/api/admin/approve/:id", async (req, res) => {
     try {
       if (!requireAdmin(req as any, res)) return;
-      const member = await storage.updateMemberStatus(
-        req.params.id,
-        "approved",
-      );
-
-      if (member) {
-        sendMembershipApprovedEmail(member).catch((emailError) => {
-          console.error("Failed to send membership approval email:", emailError);
-        });
-      }
-
-      res.json(member);
+      const result = await approveMemberWithMailbox(req.params.id);
+      res.json(result);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }
@@ -931,18 +924,58 @@ export async function registerRoutes(
   app.post("/api/admin/members/:id/approve", async (req, res) => {
     try {
       if (!requireAdmin(req as any, res)) return;
-      const member = await storage.updateMemberStatus(
-        req.params.id,
-        "approved",
+      const result = await approveMemberWithMailbox(req.params.id);
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/admin/members/:id/provision-mailbox", async (req, res) => {
+    try {
+      if (!requireAdmin(req as any, res)) return;
+      const result = await provisionMailboxForApprovedMember(req.params.id);
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/admin/mailboxes/backfill", async (req, res) => {
+    try {
+      if (!requireAdmin(req as any, res)) return;
+      const candidates = await storage.getApprovedMembersMissingMailbox();
+      const settled = await Promise.allSettled(
+        candidates.map((member) => provisionMailboxForApprovedMember(member.id)),
       );
 
-      if (member) {
-        sendMembershipApprovedEmail(member).catch((emailError) => {
-          console.error("Failed to send membership approval email:", emailError);
-        });
-      }
+      const results = settled.map((entry, index) => {
+        const candidate = candidates[index];
+        if (entry.status === "fulfilled") {
+          return entry.value;
+        }
 
-      res.json(member);
+        return {
+          memberId: candidate.id,
+          member: candidate,
+          approved: candidate.approvalStatus === "approved",
+          mailboxStatus: "failed" as const,
+          alumniEmail: candidate.alumniEmail,
+          mailboxProvisioned: false,
+          mailboxError: entry.reason instanceof Error ? entry.reason.message : "Mailbox provisioning failed",
+          welcomeEmailSent: false,
+        };
+      });
+
+      res.json({
+        total: candidates.length,
+        provisioned: results.filter((result) => result.mailboxStatus === "provisioned").length,
+        skipped: results.filter((result) => result.mailboxStatus === "skipped").length,
+        conflict: results.filter((result) => result.mailboxStatus === "conflict").length,
+        validationFailed: results.filter((result) => result.mailboxStatus === "validation_failed").length,
+        failed: results.filter((result) => result.mailboxStatus === "failed").length,
+        results,
+      });
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }

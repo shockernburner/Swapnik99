@@ -18,11 +18,22 @@ export interface IStorage {
   getMemberByUserId(userId: string): Promise<Member | undefined>;
   getMemberById(id: string): Promise<Member | undefined>;
   getMemberByEmail(email: string): Promise<Member | undefined>;
+  getMemberByLoginIdentifier(identifier: string): Promise<Member | undefined>;
   createMember(data: InsertMember): Promise<Member>;
   updateMemberStatus(id: string, approvalStatus: "approved" | "rejected"): Promise<Member | undefined>;
   updateMemberRole(id: string, role: "admin" | "user"): Promise<Member | undefined>;
+  updateMemberMailboxProvisioning(
+    id: string,
+    data: {
+      alumniEmail?: string | null;
+      mailboxProvisioned: boolean;
+      mailboxProvisionedAt?: Date | null;
+      mailboxProvisionError?: string | null;
+    },
+  ): Promise<Member | undefined>;
   getPendingMembers(): Promise<Member[]>;
   getApprovedMembers(): Promise<Member[]>;
+  getApprovedMembersMissingMailbox(): Promise<Member[]>;
   getAllMembers(): Promise<Member[]>;
   getFriendshipBetweenMembers(memberAId: string, memberBId: string): Promise<Friendship | undefined>;
   createFriendRequest(requesterId: string, addresseeId: string): Promise<Friendship>;
@@ -93,6 +104,21 @@ export class DatabaseStorage implements IStorage {
     return member;
   }
 
+  async getMemberByLoginIdentifier(identifier: string): Promise<Member | undefined> {
+    const normalizedIdentifier = identifier.toLowerCase();
+    const [member] = await db
+      .select()
+      .from(members)
+      .where(
+        or(
+          eq(members.email, normalizedIdentifier),
+          eq(members.alumniEmail, normalizedIdentifier),
+        ),
+      )
+      .limit(1);
+    return member;
+  }
+
   async createMember(data: InsertMember): Promise<Member> {
     const [member] = await db.insert(members).values(data).returning();
     return member;
@@ -116,12 +142,49 @@ export class DatabaseStorage implements IStorage {
     return member;
   }
 
+  async updateMemberMailboxProvisioning(
+    id: string,
+    data: {
+      alumniEmail?: string | null;
+      mailboxProvisioned: boolean;
+      mailboxProvisionedAt?: Date | null;
+      mailboxProvisionError?: string | null;
+    },
+  ): Promise<Member | undefined> {
+    const [member] = await db
+      .update(members)
+      .set({
+        alumniEmail: data.alumniEmail,
+        mailboxProvisioned: data.mailboxProvisioned,
+        mailboxProvisionedAt: data.mailboxProvisionedAt,
+        mailboxProvisionError: data.mailboxProvisionError,
+        updatedAt: new Date(),
+      })
+      .where(eq(members.id, id))
+      .returning();
+
+    return member;
+  }
+
   async getPendingMembers(): Promise<Member[]> {
     return db.select().from(members).where(eq(members.approvalStatus, "pending")).orderBy(desc(members.createdAt));
   }
 
   async getApprovedMembers(): Promise<Member[]> {
     return db.select().from(members).where(eq(members.approvalStatus, "approved")).orderBy(members.name);
+  }
+
+  async getApprovedMembersMissingMailbox(): Promise<Member[]> {
+    return db
+      .select()
+      .from(members)
+      .where(
+        and(
+          eq(members.approvalStatus, "approved"),
+          eq(members.mailboxProvisioned, false),
+        ),
+      )
+      .orderBy(members.name);
   }
 
   async getAllMembers(): Promise<Member[]> {

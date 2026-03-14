@@ -104,6 +104,43 @@ Swapnik99 Alumni Network`,
   return data;
 }
 
+export async function sendAlumniMailboxWelcomeEmail(input: {
+  name: string;
+  email: string;
+  alumniEmail: string;
+  temporaryPassword: string;
+}) {
+  const client = await getResendClient();
+  const mailLoginUrl = process.env.MAIL_LOGIN_URL || "https://mail.swapnik99.org";
+
+  const { data, error } = await client.emails.send({
+    from: FROM_EMAIL,
+    to: input.email,
+    subject: "Your Swapnik99 Alumni Email Is Ready",
+    text: `Hello ${input.name},
+
+Your Swapnik99 membership is approved, and your alumni mailbox has been created.
+
+Alumni email: ${input.alumniEmail}
+Temporary password: ${input.temporaryPassword}
+
+Log in here:
+${mailLoginUrl}
+
+Please sign in and change this temporary password as soon as possible.
+
+Best regards
+Swapnik99 Alumni Network`,
+  });
+
+  if (error) {
+    console.error("Failed to send alumni mailbox welcome email:", error);
+    throw new Error("Failed to send alumni mailbox welcome email");
+  }
+
+  return data;
+}
+
 export async function sendFriendRequestEmail(
   sender: Pick<Member, "name" | "email">,
   receiver: Pick<Member, "name" | "email">,
