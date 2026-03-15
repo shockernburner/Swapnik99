@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface PendingMember {
   id: string;
@@ -36,7 +37,32 @@ interface MemberForAdmin {
   createdAt: string;
 }
 
+function extractErrorMessage(raw: string): string {
+  if (!raw) return "Request failed";
+
+  const text = raw.trim();
+  try {
+    const parsed = JSON.parse(text);
+    if (typeof parsed?.message === "string") return parsed.message;
+    if (typeof parsed?.error === "string") return parsed.error;
+  } catch {
+    const jsonStart = text.indexOf("{");
+    if (jsonStart >= 0) {
+      try {
+        const parsed = JSON.parse(text.slice(jsonStart));
+        if (typeof parsed?.message === "string") return parsed.message;
+        if (typeof parsed?.error === "string") return parsed.error;
+      } catch {
+        // Ignore parse fallback errors.
+      }
+    }
+  }
+
+  return text;
+}
+
 export default function AdminPage() {
+  const { toast } = useToast();
   const [uploadOpen, setUploadOpen] = useState(false);
   const [docTitle, setDocTitle] = useState("");
   const [docCategory, setDocCategory] = useState("");
@@ -92,9 +118,13 @@ export default function AdminPage() {
     mutationFn: async (formData: FormData) => {
       const response = await fetch("/api/admin/accounting", {
         method: "POST",
+        credentials: "include",
         body: formData,
       });
-      if (!response.ok) throw new Error("Upload failed");
+      if (!response.ok) {
+        const message = extractErrorMessage(await response.text());
+        throw new Error(message || "Upload failed");
+      }
       return response.json();
     },
     onSuccess: () => {
@@ -102,7 +132,19 @@ export default function AdminPage() {
       setUploadOpen(false);
       setDocTitle("");
       setDocCategory("");
+      setDocYear(new Date().getFullYear().toString());
       setDocFile(null);
+      toast({
+        title: "Document uploaded",
+        description: "The accounting document is now available to members.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Upload failed",
+        description: extractErrorMessage(error.message),
+        variant: "destructive",
+      });
     },
   });
 

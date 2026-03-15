@@ -25,6 +25,10 @@ interface MemberProfileResponse {
   mutual_friend_count: number;
 }
 
+interface CurrentMember {
+  id: string;
+}
+
 export default function MemberProfilePage() {
   const [match, params] = useRoute("/members/:id");
   const memberId = match ? params.id : "";
@@ -32,6 +36,10 @@ export default function MemberProfilePage() {
   const { data, isLoading, error } = useQuery<MemberProfileResponse>({
     queryKey: [`/api/members/${memberId}`],
     enabled: !!memberId,
+  });
+
+  const { data: currentMember } = useQuery<CurrentMember>({
+    queryKey: ["/api/auth/me"],
   });
 
   if (isLoading) {
@@ -86,6 +94,14 @@ export default function MemberProfilePage() {
                 <h1 className="text-2xl font-bold">{member.name}</h1>
                 <p className="text-muted-foreground">{member.email}</p>
               </div>
+
+              {currentMember?.id === member.id && (
+                <Link href="/profile/edit">
+                  <Button variant="outline" size="sm" data-testid="button-edit-own-profile">
+                    Edit Profile
+                  </Button>
+                </Link>
+              )}
 
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="secondary">{friend_count} Friends</Badge>

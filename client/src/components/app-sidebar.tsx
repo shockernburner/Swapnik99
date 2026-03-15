@@ -1,4 +1,4 @@
-import { Home, MessageSquare, Users, Calendar, Briefcase, FileText, Settings, LogOut, MessageCircle } from "lucide-react";
+import { Home, MessageSquare, Users, Calendar, Briefcase, FileText, Settings, LogOut, MessageCircle, UserCog } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useMutation } from "@tanstack/react-query";
 import {
@@ -13,7 +13,7 @@ import {
   SidebarHeader,
   SidebarFooter,
 } from "@/components/ui/sidebar";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { queryClient } from "@/lib/queryClient";
 import logoImage from "@assets/swapnik_1768561630231.jpeg";
@@ -25,6 +25,7 @@ const mainItems = [
   { title: "Events", url: "/events", icon: Calendar },
   { title: "Business Connect", url: "/business", icon: Briefcase },
   { title: "Members", url: "/members", icon: Users },
+  { title: "Edit Profile", url: "/profile/edit", icon: UserCog },
 ];
 
 const adminItems = [
@@ -36,6 +37,7 @@ interface SidebarMember {
   id: string;
   email: string;
   name: string;
+  photo?: string;
   role: "user" | "admin";
 }
 
@@ -106,6 +108,7 @@ export function AppSidebar({ member }: { member: SidebarMember }) {
       <SidebarFooter className="p-4">
         <div className="flex items-center gap-3 mb-3">
           <Avatar className="h-9 w-9">
+            <AvatarImage src={member.photo || undefined} />
             <AvatarFallback className="bg-primary text-primary-foreground text-sm">
               {member?.name?.[0]?.toUpperCase() || member?.email?.[0]?.toUpperCase() || "U"}
             </AvatarFallback>

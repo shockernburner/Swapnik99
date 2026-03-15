@@ -1,14 +1,14 @@
-import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Loader2, User, Briefcase, MapPin, GraduationCap } from "lucide-react";
-import logoUrl from "@assets/swapnik_1768561630231.jpeg";
+import { Loader2, User, Briefcase, MapPin, GraduationCap, Upload } from "lucide-react";
 
 interface ProfileFormData {
   name: string;
@@ -21,8 +21,43 @@ interface ProfileFormData {
   phone: string;
 }
 
+function extractErrorMessage(raw: string): string {
+  if (!raw) return "Request failed";
+
+  const text = raw.trim();
+  try {
+    const parsed = JSON.parse(text);
+    if (typeof parsed?.message === "string") {
+      return parsed.message;
+    }
+    if (typeof parsed?.error === "string") {
+      return parsed.error;
+    }
+  } catch {
+    const jsonStart = text.indexOf("{");
+    if (jsonStart >= 0) {
+      const jsonText = text.slice(jsonStart);
+      try {
+        const parsed = JSON.parse(jsonText);
+        if (typeof parsed?.message === "string") {
+          return parsed.message;
+        }
+        if (typeof parsed?.error === "string") {
+          return parsed.error;
+        }
+      } catch {
+        // Ignore parse fallback errors.
+      }
+    }
+  }
+
+  return text;
+}
+
 export default function CompleteProfilePage() {
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
   const [formData, setFormData] = useState<ProfileFormData>({
     name: "",
     rollNumber: "",
@@ -34,21 +69,44 @@ export default function CompleteProfilePage() {
     phone: "",
   });
 
+  const { data: member, isLoading: memberLoading } = useQuery<any>({
+    queryKey: ["/api/member/profile"],
+  });
+
+  useEffect(() => {
+    if (!member) return;
+
+    setFormData({
+      name: member.name || "",
+      rollNumber: member.rollNumber || "",
+      department: member.department || "",
+      currentLocation: member.location || "",
+      profession: member.profession || "",
+      company: member.company || "",
+      bio: member.bio || "",
+      phone: member.phone || "",
+    });
+  }, [member]);
+
   const mutation = useMutation({
     mutationFn: async (data: ProfileFormData) => {
-      return apiRequest("POST", "/api/members", data);
+      return apiRequest("PATCH", "/api/member/profile", data);
     },
     onSuccess: () => {
       toast({
-        title: "Profile submitted",
-        description: "Your profile has been submitted for admin approval. You'll be notified once approved.",
+        title: "Profile updated",
+        description: "Your profile changes were saved successfully.",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/member/me"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/member/profile"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/members"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/posts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/chat/rooms"] });
     },
     onError: (error: Error) => {
       toast({
         title: "Error",
-        description: error.message,
+        description: extractErrorMessage(error.message),
         variant: "destructive",
       });
     },
@@ -71,19 +129,94 @@ export default function CompleteProfilePage() {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
+  const handlePhotoSelect = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handlePhotoChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      setPhotoUploading(true);
+      const response = await fetch("/api/member/photo", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(extractErrorMessage(message || "Photo upload failed"));
+      }
+
+      toast({
+        title: "Photo updated",
+        description: "Your profile photo has been updated.",
+      });
+
+      queryClient.invalidateQueries({ queryKey: ["/api/member/profile"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/members"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/posts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/chat/rooms"] });
+    } catch (error: any) {
+      toast({
+        title: "Upload failed",
+        description: extractErrorMessage(error.message),
+        variant: "destructive",
+      });
+    } finally {
+      setPhotoUploading(false);
+      event.target.value = "";
+    }
+  };
+
+  if (memberLoading) {
+    return (
+      <div className="max-w-3xl mx-auto py-10 px-4">
+        <Card>
+          <CardContent className="p-10 flex items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/5 flex items-center justify-center p-4">
-      <Card className="w-full max-w-lg">
+    <div className="max-w-3xl mx-auto py-10 px-4 space-y-6">
+      <Card>
         <CardHeader className="text-center">
-          <div className="flex justify-center mb-4">
-            <img src={logoUrl} alt="Swapnik99" className="h-16 w-16 rounded-full object-cover" />
-          </div>
-          <CardTitle className="text-2xl">Complete Your Profile</CardTitle>
+          <CardTitle className="text-2xl">Edit Profile</CardTitle>
           <CardDescription>
-            Fill in your details to join the BUET '99 alumni network. Your profile will be reviewed by an admin.
+            Keep your profile and photo up to date so members can recognize you.
           </CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="flex flex-col items-center gap-3 mb-6">
+            <Avatar className="h-24 w-24">
+              <AvatarImage src={member?.photo || undefined} />
+              <AvatarFallback className="text-xl">
+                {formData.name?.[0] || "U"}
+              </AvatarFallback>
+            </Avatar>
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              accept=".jpg,.jpeg,.png,.webp,.gif"
+              onChange={handlePhotoChange}
+            />
+            <Button type="button" variant="outline" onClick={handlePhotoSelect} disabled={photoUploading}>
+              {photoUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+              {photoUploading ? "Uploading..." : "Upload Photo"}
+            </Button>
+          </div>
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="name" className="flex items-center gap-2">
@@ -190,10 +323,10 @@ export default function CompleteProfilePage() {
               {mutation.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Submitting...
+                  Saving...
                 </>
               ) : (
-                "Submit for Approval"
+                "Save Profile"
               )}
             </Button>
           </form>

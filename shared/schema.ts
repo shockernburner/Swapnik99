@@ -183,6 +183,21 @@ export const chatMessages = pgTable("chat_messages", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Legacy AI chat integration tables used by /server/replit_integrations/chat
+export const conversations = pgTable("conversations", {
+  id: serial("id").primaryKey(),
+  title: varchar("title").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const messages = pgTable("messages", {
+  id: serial("id").primaryKey(),
+  conversationId: integer("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+  role: varchar("role").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const passwordResetTokens = pgTable("password_reset_tokens", {
   id: serial("id").primaryKey(),
   memberId: varchar("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),

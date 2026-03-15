@@ -24,6 +24,7 @@ import MemberProfilePage from "@/pages/MemberProfile";
 import AccountingPage from "@/pages/accounting";
 import AdminPage from "@/pages/admin";
 import PendingApprovalPage from "@/pages/pending-approval";
+import CompleteProfilePage from "@/pages/complete-profile";
 
 interface Member {
   id: string;
@@ -54,6 +55,7 @@ function AuthenticatedRouter({ member }: { member: Member }) {
       <Route path="/members" component={MembersPage} />
       <Route path="/members/:id" component={MemberProfilePage} />
       <Route path="/accounting" component={AccountingPage} />
+      <Route path="/profile/edit" component={CompleteProfilePage} />
       <Route path="/admin">
         {() => (member.role === "admin" ? <AdminPage /> : <RedirectHome />)}
       </Route>

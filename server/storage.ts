@@ -20,6 +20,20 @@ export interface IStorage {
   getMemberByEmail(email: string): Promise<Member | undefined>;
   getMemberByLoginIdentifier(identifier: string): Promise<Member | undefined>;
   createMember(data: InsertMember): Promise<Member>;
+  updateMemberProfile(
+    id: string,
+    data: {
+      name?: string;
+      rollNumber?: string | null;
+      department?: string | null;
+      location?: string | null;
+      profession?: string | null;
+      company?: string | null;
+      phone?: string | null;
+      bio?: string | null;
+      photo?: string | null;
+    },
+  ): Promise<Member | undefined>;
   updateMemberStatus(id: string, approvalStatus: "approved" | "rejected"): Promise<Member | undefined>;
   updateMemberRole(id: string, role: "admin" | "user"): Promise<Member | undefined>;
   updateMemberMailboxProvisioning(
@@ -121,6 +135,34 @@ export class DatabaseStorage implements IStorage {
 
   async createMember(data: InsertMember): Promise<Member> {
     const [member] = await db.insert(members).values(data).returning();
+    return member;
+  }
+
+  async updateMemberProfile(
+    id: string,
+    data: {
+      name?: string;
+      rollNumber?: string | null;
+      department?: string | null;
+      location?: string | null;
+      profession?: string | null;
+      company?: string | null;
+      phone?: string | null;
+      bio?: string | null;
+      photo?: string | null;
+    },
+  ): Promise<Member | undefined> {
+    const updateData = {
+      ...data,
+      updatedAt: new Date(),
+    };
+
+    const [member] = await db
+      .update(members)
+      .set(updateData)
+      .where(eq(members.id, id))
+      .returning();
+
     return member;
   }
 

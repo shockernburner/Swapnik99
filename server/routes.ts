@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import type { Server } from "http";
+import multer from "multer";
 import { storage } from "./storage";
 import {
   insertPostSchema,
@@ -20,10 +21,18 @@ import {
   approveMemberWithMailbox,
   provisionMailboxForApprovedMember,
 } from "./services/member-approval";
+import { saveUploadedFile } from "./upload-storage";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+});
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 15 * 1024 * 1024,
+  },
 });
 
 function getMember(req: any) {
@@ -359,6 +368,109 @@ export async function registerRoutes(
       res.json(member);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/member/profile", async (req, res) => {
+    try {
+      if (!requireMember(req as any, res)) return;
+
+      const member = getMember(req);
+      const latestMember = await storage.getMemberById(member.id);
+      if (!latestMember) {
+        return res.status(404).json({ message: "Member not found" });
+      }
+
+      res.json(latestMember);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/member/profile", async (req, res) => {
+    try {
+      if (!requireMember(req as any, res)) return;
+
+      const member = getMember(req);
+      const payload = req.body ?? {};
+
+      const normalize = (value: unknown): string | null => {
+        if (value === undefined) return null;
+        const text = String(value).trim();
+        return text.length > 0 ? text : null;
+      };
+
+      const updates = {
+        name: payload.name !== undefined ? String(payload.name).trim() : undefined,
+        rollNumber: payload.rollNumber !== undefined ? normalize(payload.rollNumber) : undefined,
+        department: payload.department !== undefined ? normalize(payload.department) : undefined,
+        location:
+          payload.currentLocation !== undefined
+            ? normalize(payload.currentLocation)
+            : payload.location !== undefined
+              ? normalize(payload.location)
+              : undefined,
+        profession: payload.profession !== undefined ? normalize(payload.profession) : undefined,
+        company: payload.company !== undefined ? normalize(payload.company) : undefined,
+        phone: payload.phone !== undefined ? normalize(payload.phone) : undefined,
+        bio: payload.bio !== undefined ? normalize(payload.bio) : undefined,
+      };
+
+      if (updates.name !== undefined && !updates.name) {
+        return res.status(400).json({ message: "Name is required" });
+      }
+
+      const updatedMember = await storage.updateMemberProfile(member.id, updates);
+      if (!updatedMember) {
+        return res.status(404).json({ message: "Member not found" });
+      }
+
+      res.json(updatedMember);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/member/photo", upload.single("file"), async (req, res) => {
+    try {
+      if (!requireMember(req as any, res)) return;
+
+      if (!req.file) {
+        return res.status(400).json({ message: "Photo file is required" });
+      }
+
+      const member = getMember(req);
+      const saved = await saveUploadedFile(req.file, "profiles");
+      const updatedMember = await storage.updateMemberProfile(member.id, {
+        photo: saved.url,
+      });
+
+      if (!updatedMember) {
+        return res.status(404).json({ message: "Member not found" });
+      }
+
+      res.json({
+        photo: updatedMember.photo,
+        fileType: saved.fileType,
+      });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/uploads/image", upload.single("file"), async (req, res) => {
+    try {
+      if (!requireMember(req as any, res)) return;
+
+      if (!req.file) {
+        return res.status(400).json({ message: "Image file is required" });
+      }
+
+      const kind = req.body.kind === "profile" ? "profiles" : "feed";
+      const saved = await saveUploadedFile(req.file, kind);
+      res.json(saved);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
     }
   });
 
@@ -1014,18 +1126,39 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/admin/accounting", async (req, res) => {
+  app.post("/api/admin/accounting", upload.single("file"), async (req, res) => {
     try {
       if (!requireAdmin(req as any, res)) return;
       const member = getMember(req);
 
+      const title = String(req.body.title || "").trim();
+      const category = String(req.body.category || "").trim();
+      const parsedYear = parseInt(String(req.body.year || ""), 10);
+
+      if (!title || !category || Number.isNaN(parsedYear)) {
+        return res.status(400).json({ message: "Title, category, and year are required" });
+      }
+
+      let fileUrl = req.body.fileUrl as string | undefined;
+      let fileType = req.body.fileType as string | undefined;
+
+      if (req.file) {
+        const saved = await saveUploadedFile(req.file, "accounting");
+        fileUrl = saved.url;
+        fileType = saved.fileType;
+      }
+
+      if (!fileUrl) {
+        return res.status(400).json({ message: "Document file is required" });
+      }
+
       const doc = await storage.createAccountingDocument({
         uploadedBy: member.id,
-        title: req.body.title,
-        category: req.body.category,
-        year: parseInt(req.body.year),
-        fileUrl: req.body.fileUrl || "/placeholder-document.pdf",
-        fileType: req.body.fileType,
+        title,
+        category,
+        year: parsedYear,
+        fileUrl,
+        fileType: fileType ?? null,
       });
 
       res.json(doc);

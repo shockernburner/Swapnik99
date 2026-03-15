@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Send, Plus, Users, MessageCircle, Loader2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import { useAuth } from "@/hooks/use-auth";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 
 interface ChatRoom {
@@ -34,14 +34,31 @@ interface ChatMessageType {
   };
 }
 
+interface MemberDirectoryItem {
+  id: string;
+  name: string;
+  photo?: string;
+  department?: string;
+  profession?: string;
+}
+
+interface CurrentMember {
+  id: string;
+}
+
 export default function ChatPage() {
   const [selectedRoom, setSelectedRoom] = useState<number | null>(null);
   const [message, setMessage] = useState("");
+  const [newChatOpen, setNewChatOpen] = useState(false);
+  const [memberSearch, setMemberSearch] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const { user } = useAuth();
   const queryParams = new URLSearchParams(window.location.search);
   const roomIdFromQuery = queryParams.get("room");
   const memberIdFromQuery = queryParams.get("memberId");
+
+  const { data: currentMember } = useQuery<CurrentMember>({
+    queryKey: ["/api/auth/me"],
+  });
 
   const { data: rooms, isLoading: roomsLoading } = useQuery<ChatRoom[]>({
     queryKey: ["/api/chat/rooms"],
@@ -50,6 +67,10 @@ export default function ChatPage() {
   const { data: messages, isLoading: messagesLoading, refetch: refetchMessages } = useQuery<ChatMessageType[]>({
     queryKey: ["/api/chat/rooms", selectedRoom, "messages"],
     enabled: !!selectedRoom,
+  });
+
+  const { data: allMembers } = useQuery<MemberDirectoryItem[]>({
+    queryKey: ["/api/members"],
   });
 
   const sendMessageMutation = useMutation({
@@ -71,6 +92,8 @@ export default function ChatPage() {
     onSuccess: (room) => {
       queryClient.invalidateQueries({ queryKey: ["/api/chat/rooms"] });
       setSelectedRoom(room.id);
+      setNewChatOpen(false);
+      setMemberSearch("");
       window.history.replaceState({}, "", `/chat?room=${room.id}`);
     },
   });
@@ -118,6 +141,16 @@ export default function ChatPage() {
   };
 
   const selectedRoomData = rooms?.find((r) => r.id === selectedRoom);
+  const filteredMembers = (allMembers || []).filter((member) => {
+    const searchText = memberSearch.trim().toLowerCase();
+    if (!searchText) return true;
+
+    return (
+      member.name.toLowerCase().includes(searchText) ||
+      member.department?.toLowerCase().includes(searchText) ||
+      member.profession?.toLowerCase().includes(searchText)
+    );
+  });
 
   return (
     <div className="h-[calc(100vh-4rem)] flex gap-4 p-4">
@@ -125,7 +158,12 @@ export default function ChatPage() {
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg">Messages</CardTitle>
-            <Button size="icon" variant="ghost" data-testid="button-new-chat">
+            <Button
+              size="icon"
+              variant="ghost"
+              data-testid="button-new-chat"
+              onClick={() => setNewChatOpen(true)}
+            >
               <Plus className="h-4 w-4" />
             </Button>
           </div>
@@ -216,7 +254,7 @@ export default function ChatPage() {
                 ) : messages && messages.length > 0 ? (
                   <div className="space-y-4">
                     {messages.map((msg) => {
-                      const isOwn = msg.sender.id === user?.id;
+                      const isOwn = msg.sender.id === currentMember?.id;
                       return (
                         <div
                           key={msg.id}
@@ -291,6 +329,52 @@ export default function ChatPage() {
           </div>
         )}
       </Card>
+
+      <Dialog open={newChatOpen} onOpenChange={setNewChatOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Start New Chat</DialogTitle>
+          </DialogHeader>
+
+          <Input
+            value={memberSearch}
+            onChange={(e) => setMemberSearch(e.target.value)}
+            placeholder="Search members by name, department, or profession"
+            data-testid="input-new-chat-search"
+          />
+
+          <div className="max-h-96 overflow-y-auto space-y-2 pr-1">
+            {filteredMembers.length > 0 ? (
+              filteredMembers.map((member) => (
+                <div key={member.id} className="flex items-center justify-between rounded-md border px-3 py-2">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-9 w-9">
+                      <AvatarImage src={member.photo} />
+                      <AvatarFallback>{member.name?.[0] || "U"}</AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="text-sm font-medium">{member.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {member.profession || member.department || "Member"}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => createDirectRoomMutation.mutate(member.id)}
+                    disabled={createDirectRoomMutation.isPending}
+                    data-testid={`button-start-chat-${member.id}`}
+                  >
+                    Chat
+                  </Button>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground">No members found.</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -25,8 +25,8 @@ export default function AccountingPage() {
     queryKey: ["/api/accounting"],
   });
 
-  const years = [...new Set(documents?.map((d) => d.year))].sort((a, b) => b - a);
-  const categories = [...new Set(documents?.map((d) => d.category))];
+  const years = Array.from(new Set((documents || []).map((d) => d.year))).sort((a, b) => b - a);
+  const categories = Array.from(new Set((documents || []).map((d) => d.category)));
 
   const filteredDocs = documents?.filter((doc) => {
     const yearMatch = selectedYear === "all" || doc.year.toString() === selectedYear;

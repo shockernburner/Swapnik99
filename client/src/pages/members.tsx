@@ -95,65 +95,80 @@ export default function MembersPage() {
       </div>
 
       {isLoading ? (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <Card key={i} className="animate-pulse">
-              <CardContent className="p-6">
-                <div className="flex flex-col items-center text-center">
-                  <div className="h-20 w-20 rounded-full bg-muted mb-4" />
-                  <div className="h-5 bg-muted rounded w-32 mb-2" />
-                  <div className="h-4 bg-muted rounded w-24" />
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      ) : filteredMembers && filteredMembers.length > 0 ? (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredMembers.map((member) => (
-            <Card key={member.id} className="hover-elevate transition-all" data-testid={`member-${member.id}`}>
-              <CardContent className="p-6">
-                <div className="flex flex-col items-center text-center">
-                  <Avatar className="h-20 w-20 mb-4">
-                    <AvatarImage src={member.photo} />
-                    <AvatarFallback className="bg-primary text-primary-foreground text-2xl">
-                      {member.name?.[0]}
-                    </AvatarFallback>
-                  </Avatar>
-                  <h3 className="font-semibold text-lg">{member.name}</h3>
-                  {member.profession && (
-                    <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
-                      <Briefcase className="h-3 w-3" />
-                      <span>{member.profession}</span>
+        <Card>
+          <CardContent className="p-0">
+            <div className="divide-y">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <div key={i} className="flex items-center justify-between p-4 animate-pulse">
+                  <div className="flex items-center gap-3">
+                    <div className="h-11 w-11 rounded-full bg-muted" />
+                    <div className="space-y-2">
+                      <div className="h-4 w-40 rounded bg-muted" />
+                      <div className="h-3 w-28 rounded bg-muted" />
                     </div>
-                  )}
-                  {member.department && (
-                    <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
-                      <GraduationCap className="h-3 w-3" />
-                      <span>{member.department}</span>
-                    </div>
-                  )}
-                  {member.location && (
-                    <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
-                      <MapPin className="h-3 w-3" />
-                      <span>{member.location}</span>
-                    </div>
-                  )}
-                  {member.bio && (
-                    <p className="text-sm text-muted-foreground mt-3 line-clamp-2">{member.bio}</p>
-                  )}
-                  <div className="mt-3">
-                    {member.isOnline ? (
-                      <Badge variant="secondary">Online</Badge>
-                    ) : member.lastSeen ? (
-                      <p className="text-xs text-muted-foreground">
-                        Last seen {formatDistanceToNow(new Date(member.lastSeen), { addSuffix: true })}
-                      </p>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">Offline</p>
-                    )}
                   </div>
-                  <div className="flex items-center gap-2 mt-4">
+                  <div className="h-8 w-28 rounded bg-muted" />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      ) : filteredMembers && filteredMembers.length > 0 ? (
+        <Card>
+          <CardContent className="p-0">
+            <div className="divide-y">
+              {filteredMembers.map((member) => (
+                <div
+                  key={member.id}
+                  className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-4"
+                  data-testid={`member-${member.id}`}
+                >
+                  <div className="flex items-start gap-3 min-w-0">
+                    <Avatar className="h-11 w-11 mt-0.5">
+                      <AvatarImage src={member.photo} />
+                      <AvatarFallback className="bg-primary text-primary-foreground">
+                        {member.name?.[0]}
+                      </AvatarFallback>
+                    </Avatar>
+
+                    <div className="min-w-0">
+                      <p className="font-semibold truncate">{member.name}</p>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground mt-1">
+                        {member.profession && (
+                          <span className="flex items-center gap-1">
+                            <Briefcase className="h-3 w-3" />
+                            {member.profession}
+                          </span>
+                        )}
+                        {member.department && (
+                          <span className="flex items-center gap-1">
+                            <GraduationCap className="h-3 w-3" />
+                            {member.department}
+                          </span>
+                        )}
+                        {member.location && (
+                          <span className="flex items-center gap-1">
+                            <MapPin className="h-3 w-3" />
+                            {member.location}
+                          </span>
+                        )}
+                      </div>
+                      {member.bio && <p className="text-sm text-muted-foreground mt-1 line-clamp-1">{member.bio}</p>}
+                      <div className="mt-1">
+                        {member.isOnline ? (
+                          <Badge variant="secondary">Online</Badge>
+                        ) : member.lastSeen ? (
+                          <span className="text-xs text-muted-foreground">
+                            Last seen {formatDistanceToNow(new Date(member.lastSeen), { addSuffix: true })}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Offline</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
                     {member.isFriend ? (
                       <Badge variant="secondary">Friends</Badge>
                     ) : member.friendshipStatus === "pending" ? (
@@ -201,10 +216,10 @@ export default function MembersPage() {
                     </Button>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       ) : (
         <Card>
           <CardContent className="p-12 text-center">
