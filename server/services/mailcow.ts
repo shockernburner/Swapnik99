@@ -17,6 +17,7 @@ function readConfig() {
   const apiKey = process.env.MAILCOW_API_KEY;
   const domain = process.env.MAILCOW_DOMAIN || process.env.MAIL_DOMAIN || "swapnik99.org";
   const quotaMb = Number(process.env.MAILCOW_MAILBOX_QUOTA_MB || process.env.MAIL_QUOTA_MB || "2048");
+  const passwordLength = Number(process.env.MAILCOW_PASSWORD_LENGTH || "24");
 
   if (!apiUrl) {
     throw new Error("MAILCOW_API_BASE_URL or MAILCOW_API_URL is required");
@@ -30,24 +31,52 @@ function readConfig() {
     throw new Error("MAILCOW mailbox quota must be a positive number");
   }
 
+  if (!Number.isFinite(passwordLength) || passwordLength < 16) {
+    throw new Error("MAILCOW password length must be a number greater than or equal to 16");
+  }
+
   return {
     apiUrl: apiUrl.replace(/\/+$/, ""),
     apiKey,
     domain,
     quotaMb,
+    passwordLength,
   };
 }
 
-function createTemporaryPassword(length = 20): string {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*()-_=+";
-  const bytes = crypto.randomBytes(length);
-  let password = "";
+function takeRandomChar(alphabet: string): string {
+  const bytes = crypto.randomBytes(1);
+  return alphabet[bytes[0] % alphabet.length];
+}
 
-  for (let index = 0; index < length; index += 1) {
-    password += alphabet[bytes[index] % alphabet.length];
+function shuffleCharacters(characters: string[]): string {
+  for (let index = characters.length - 1; index > 0; index -= 1) {
+    const swapIndex = crypto.randomInt(0, index + 1);
+    [characters[index], characters[swapIndex]] = [characters[swapIndex], characters[index]];
   }
 
-  return password;
+  return characters.join("");
+}
+
+function createTemporaryPassword(length = 24): string {
+  const lowercase = "abcdefghijkmnopqrstuvwxyz";
+  const uppercase = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const digits = "23456789";
+  const specialChars = "!@#$%^&*()?=";
+  const allCharacters = `${lowercase}${uppercase}${digits}${specialChars}`;
+
+  const passwordCharacters = [
+    takeRandomChar(lowercase),
+    takeRandomChar(uppercase),
+    takeRandomChar(digits),
+    takeRandomChar(specialChars),
+  ];
+
+  while (passwordCharacters.length < length) {
+    passwordCharacters.push(takeRandomChar(allCharacters));
+  }
+
+  return shuffleCharacters(passwordCharacters);
 }
 
 function parseMailcowResponse(payload: unknown): MailcowMessage[] {
@@ -73,7 +102,7 @@ function extractMessage(messages: MailcowMessage[]): string {
 
 export async function createMailcowMailbox(input: CreateMailboxInput): Promise<{ temporaryPassword: string }> {
   const config = readConfig();
-  const temporaryPassword = createTemporaryPassword();
+  const temporaryPassword = createTemporaryPassword(config.passwordLength);
 
   const response = await fetch(`${config.apiUrl}/add/mailbox`, {
     method: "POST",
@@ -85,9 +114,12 @@ export async function createMailcowMailbox(input: CreateMailboxInput): Promise<{
       local_part: input.localPart,
       domain: input.domain,
       name: input.name,
+      authsource: "mailcow",
       quota: input.quotaMb || config.quotaMb,
       password: temporaryPassword,
+      password2: temporaryPassword,
       active: "1",
+      force_pw_update: "1",
     }),
   });
 
