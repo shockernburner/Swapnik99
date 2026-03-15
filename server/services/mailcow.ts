@@ -135,6 +135,39 @@ export async function createMailcowMailbox(input: CreateMailboxInput): Promise<{
   return { temporaryPassword };
 }
 
+export async function resetMailcowMailboxPassword(mailbox: string): Promise<{ temporaryPassword: string }> {
+  const config = readConfig();
+  const temporaryPassword = createTemporaryPassword(config.passwordLength);
+
+  const response = await fetch(`${config.apiUrl}/edit/mailbox`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-API-Key": config.apiKey,
+    },
+    body: JSON.stringify({
+      items: [mailbox],
+      attr: {
+        authsource: "mailcow",
+        password: temporaryPassword,
+        password2: temporaryPassword,
+        force_pw_update: "1",
+      },
+    }),
+  });
+
+  const responseBody = await response.json().catch(() => null);
+  const messages = parseMailcowResponse(responseBody);
+  const hasError = messages.some((entry) => entry.type === "danger" || entry.type === "error");
+
+  if (!response.ok || hasError) {
+    const errorMessage = extractMessage(messages);
+    throw new Error(`Mailcow mailbox password reset failed: ${errorMessage}`);
+  }
+
+  return { temporaryPassword };
+}
+
 export function getMailcowDomain(): string {
   return (process.env.MAILCOW_DOMAIN || process.env.MAIL_DOMAIN || "swapnik99.org").trim().toLowerCase();
 }

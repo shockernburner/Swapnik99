@@ -9,7 +9,8 @@
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "db:push": "drizzle-kit push",
-    "mailboxes:backfill": "tsx script/backfill-approved-mailboxes.ts"
+    "mailboxes:backfill": "tsx script/backfill-approved-mailboxes.ts",
+    "welcome-mails:send": "tsx script/send-alumni-welcome-emails.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
