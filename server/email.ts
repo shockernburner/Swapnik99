@@ -2,7 +2,8 @@
 import { Resend } from "resend";
 import type { Member } from "@shared/schema";
 
-const FROM_EMAIL = "Swapnik99 <info@swapnik99.org>";
+const FROM_EMAIL = process.env.FROM_EMAIL || "Swapnik99 <info@swapnik99.org>";
+const ALUMNI_MAIL_FROM_EMAIL = process.env.ALUMNI_MAIL_FROM_EMAIL || "Swapnik99 Mail <no-reply@mail.swapnik99.org>";
 
 async function getResendClient() {
   const apiKey = process.env.RESEND_API_KEY;
@@ -112,22 +113,28 @@ export async function sendAlumniMailboxWelcomeEmail(input: {
 }) {
   const client = await getResendClient();
   const mailLoginUrl = process.env.MAIL_LOGIN_URL || "https://mail.swapnik99.org";
+  const setupGuideUrl = process.env.MAIL_SETUP_GUIDE_URL?.trim();
+  const setupGuideText = setupGuideUrl
+    ? `You can also follow the mailbox setup guide for other apps:\n${setupGuideUrl}`
+    : "You can also use the setup guide already shared with you to configure this mailbox in other apps.";
 
   const { data, error } = await client.emails.send({
-    from: FROM_EMAIL,
+    from: ALUMNI_MAIL_FROM_EMAIL,
     to: input.email,
     subject: "Your Swapnik99 Alumni Email Is Ready",
     text: `Hello ${input.name},
 
-Your Swapnik99 membership is approved, and your alumni mailbox has been created.
+Your new Swapnik99 alumni mailbox has been created.
 
 Alumni email: ${input.alumniEmail}
 Temporary password: ${input.temporaryPassword}
 
-Log in here:
+You can log in and start using your mailbox here:
 ${mailLoginUrl}
 
 Please sign in and change this temporary password as soon as possible.
+
+${setupGuideText}
 
 Best regards
 Swapnik99 Alumni Network`,
