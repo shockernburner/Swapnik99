@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Plus, MessageSquare, Sparkles, ChevronRight, Loader2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface DiscussionWithAuthor {
   id: number;
@@ -26,8 +27,54 @@ interface DiscussionWithAuthor {
   repliesCount: number;
 }
 
+interface DiscussionDetail {
+  id: number;
+  headline: string;
+  description: string;
+  aiSummary?: string;
+  createdAt: string;
+}
+
+interface DiscussionReply {
+  id: number;
+  content: string;
+  createdAt: string;
+  author: {
+    id: string;
+    name: string;
+    photo?: string;
+  };
+}
+
+function extractErrorMessage(raw: string): string {
+  if (!raw) return "Request failed";
+
+  const text = raw.trim();
+  try {
+    const parsed = JSON.parse(text);
+    if (typeof parsed?.message === "string") return parsed.message;
+    if (typeof parsed?.error === "string") return parsed.error;
+  } catch {
+    const jsonStart = text.indexOf("{");
+    if (jsonStart >= 0) {
+      try {
+        const parsed = JSON.parse(text.slice(jsonStart));
+        if (typeof parsed?.message === "string") return parsed.message;
+        if (typeof parsed?.error === "string") return parsed.error;
+      } catch {
+        // Ignore parse fallback errors.
+      }
+    }
+  }
+
+  return text;
+}
+
 export default function DiscussionsPage() {
+  const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
+  const [selectedDiscussionId, setSelectedDiscussionId] = useState<number | null>(null);
+  const [replyDraft, setReplyDraft] = useState("");
   const [headline, setHeadline] = useState("");
   const [description, setDescription] = useState("");
 
@@ -45,6 +92,43 @@ export default function DiscussionsPage() {
       setHeadline("");
       setDescription("");
     },
+    onError: (error: Error) => {
+      toast({
+        title: "Could not create discussion",
+        description: extractErrorMessage(error.message),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const selectedDiscussion = discussions?.find((discussion) => discussion.id === selectedDiscussionId);
+
+  const { data: discussionDetail } = useQuery<DiscussionDetail>({
+    queryKey: ["/api/discussions", selectedDiscussionId],
+    enabled: !!selectedDiscussionId,
+  });
+
+  const { data: replies } = useQuery<DiscussionReply[]>({
+    queryKey: ["/api/discussions", selectedDiscussionId, "replies"],
+    enabled: !!selectedDiscussionId,
+  });
+
+  const replyMutation = useMutation({
+    mutationFn: async ({ discussionId, content }: { discussionId: number; content: string }) => {
+      return apiRequest("POST", `/api/discussions/${discussionId}/replies`, { content });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/discussions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/discussions", selectedDiscussionId, "replies"] });
+      setReplyDraft("");
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Could not post reply",
+        description: extractErrorMessage(error.message),
+        variant: "destructive",
+      });
+    },
   });
 
   const handleCreate = (e: React.FormEvent) => {
@@ -52,6 +136,12 @@ export default function DiscussionsPage() {
     if (headline.trim() && description.trim()) {
       createMutation.mutate({ headline, description });
     }
+  };
+
+  const handleReplySubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedDiscussionId || !replyDraft.trim()) return;
+    replyMutation.mutate({ discussionId: selectedDiscussionId, content: replyDraft.trim() });
   };
 
   return (
@@ -125,7 +215,15 @@ export default function DiscussionsPage() {
       ) : discussions && discussions.length > 0 ? (
         <div className="space-y-4">
           {discussions.map((discussion) => (
-            <Card key={discussion.id} className="hover-elevate cursor-pointer transition-all" data-testid={`discussion-${discussion.id}`}>
+            <Card
+              key={discussion.id}
+              className="hover-elevate cursor-pointer transition-all"
+              data-testid={`discussion-${discussion.id}`}
+              onClick={() => {
+                setSelectedDiscussionId(discussion.id);
+                setReplyDraft("");
+              }}
+            >
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1">
@@ -181,6 +279,89 @@ export default function DiscussionsPage() {
           </CardContent>
         </Card>
       )}
+
+      <Dialog
+        open={!!selectedDiscussionId}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedDiscussionId(null);
+            setReplyDraft("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{discussionDetail?.headline || selectedDiscussion?.headline || "Discussion"}</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="rounded-md border p-4">
+              {selectedDiscussion && (
+                <div className="flex items-center gap-2 mb-3">
+                  <Avatar className="h-7 w-7">
+                    <AvatarImage src={selectedDiscussion.author.photo} />
+                    <AvatarFallback>{selectedDiscussion.author.name?.[0] || "U"}</AvatarFallback>
+                  </Avatar>
+                  <span className="text-sm font-medium">{selectedDiscussion.author.name}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {formatDistanceToNow(new Date(selectedDiscussion.createdAt), { addSuffix: true })}
+                  </span>
+                </div>
+              )}
+
+              <p className="text-sm whitespace-pre-wrap">
+                {discussionDetail?.description || selectedDiscussion?.description || ""}
+              </p>
+
+              {(discussionDetail?.aiSummary || selectedDiscussion?.aiSummary) && (
+                <div className="mt-3 p-3 bg-accent/10 rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Sparkles className="h-4 w-4 text-accent" />
+                    <span className="text-xs font-medium text-accent">AI Summary</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                    {discussionDetail?.aiSummary || selectedDiscussion?.aiSummary}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="max-h-72 overflow-y-auto space-y-3 pr-2">
+              {replies && replies.length > 0 ? (
+                replies.map((reply) => (
+                  <div key={reply.id} className="rounded-md border p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Avatar className="h-7 w-7">
+                        <AvatarImage src={reply.author.photo} />
+                        <AvatarFallback>{reply.author.name?.[0] || "U"}</AvatarFallback>
+                      </Avatar>
+                      <span className="text-sm font-medium">{reply.author.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {formatDistanceToNow(new Date(reply.createdAt), { addSuffix: true })}
+                      </span>
+                    </div>
+                    <p className="text-sm whitespace-pre-wrap">{reply.content}</p>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground">No replies yet. Be the first to reply.</p>
+              )}
+            </div>
+
+            <form onSubmit={handleReplySubmit} className="flex items-center gap-2">
+              <Input
+                placeholder="Write a reply..."
+                value={replyDraft}
+                onChange={(e) => setReplyDraft(e.target.value)}
+                data-testid="input-discussion-reply"
+              />
+              <Button type="submit" disabled={!replyDraft.trim() || replyMutation.isPending}>
+                {replyMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send"}
+              </Button>
+            </form>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

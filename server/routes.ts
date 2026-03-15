@@ -190,28 +190,51 @@ export async function registerRoutes(
   });
 
   app.post("/api/auth/logout", (req, res) => {
-    req.session.destroy((err) => {
-      if (err) {
-        return res.status(500).json({ message: "Logout failed" });
-      }
-      res.clearCookie("connect.sid");
-      res.json({ message: "Logged out successfully" });
-    });
+    const clearSession = () => {
+      (req.session as any).memberId = undefined;
+      req.session.destroy((err) => {
+        if (err) {
+          return res.status(500).json({ message: "Logout failed" });
+        }
+        res.clearCookie("connect.sid");
+        res.json({ message: "Logged out successfully" });
+      });
+    };
+
+    if (typeof (req as any).logout === "function") {
+      (req as any).logout((logoutError: Error | null) => {
+        if (logoutError) {
+          return res.status(500).json({ message: "Logout failed" });
+        }
+        clearSession();
+      });
+      return;
+    }
+
+    clearSession();
   });
 
   app.get("/api/auth/me", async (req, res) => {
     try {
-      const memberId = (req.session as any)?.memberId;
-      if (!memberId) {
+      const sessionMemberId = (req.session as any)?.memberId;
+
+      let member = null;
+      if (sessionMemberId) {
+        member = await storage.getMemberById(sessionMemberId);
+      } else if ((req as any).user?.id) {
+        member = await storage.getMemberByUserId((req as any).user.id);
+      }
+
+      if (!member) {
         return res.status(401).json({ message: "Not authenticated" });
       }
 
-      const member = await storage.getMemberById(memberId);
-      if (!member) {
+      const latestMember = await storage.getMemberById(member.id);
+      if (!latestMember) {
         return res.status(401).json({ message: "Member not found" });
       }
 
-      res.json({ ...member, password: undefined });
+      res.json({ ...latestMember, password: undefined });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
