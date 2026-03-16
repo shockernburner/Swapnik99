@@ -33,6 +33,12 @@ interface DiscussionDetail {
   description: string;
   aiSummary?: string;
   createdAt: string;
+  author?: {
+    id: string;
+    name: string;
+    photo?: string;
+  };
+  replies?: DiscussionReply[];
 }
 
 interface DiscussionReply {
@@ -43,6 +49,30 @@ interface DiscussionReply {
     id: string;
     name: string;
     photo?: string;
+  };
+}
+
+function parseCompiledSummary(summary?: string): {
+  mainTopic: string;
+  proposal: string;
+  memberComments: string;
+} {
+  if (!summary) {
+    return {
+      mainTopic: "Summary will appear after the discussion is analyzed.",
+      proposal: "No proposal inferred yet.",
+      memberComments: "No member comment synthesis yet.",
+    };
+  }
+
+  const mainTopicMatch = summary.match(/Main Topic:\s*([\s\S]*?)(?=\n\s*Proposal:|$)/i);
+  const proposalMatch = summary.match(/Proposal:\s*([\s\S]*?)(?=\n\s*Member Comments:|$)/i);
+  const memberCommentsMatch = summary.match(/Member Comments:\s*([\s\S]*)$/i);
+
+  return {
+    mainTopic: mainTopicMatch?.[1]?.trim() || "No topic summary available.",
+    proposal: proposalMatch?.[1]?.trim() || "No proposal summary available.",
+    memberComments: memberCommentsMatch?.[1]?.trim() || "No member comment synthesis available.",
   };
 }
 
@@ -119,6 +149,7 @@ export default function DiscussionsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/discussions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/discussions", selectedDiscussionId] });
       queryClient.invalidateQueries({ queryKey: ["/api/discussions", selectedDiscussionId, "replies"] });
       setReplyDraft("");
     },
@@ -143,6 +174,9 @@ export default function DiscussionsPage() {
     if (!selectedDiscussionId || !replyDraft.trim()) return;
     replyMutation.mutate({ discussionId: selectedDiscussionId, content: replyDraft.trim() });
   };
+
+  const activeReplies = replies || discussionDetail?.replies || [];
+  const compiledSummary = parseCompiledSummary(discussionDetail?.aiSummary || selectedDiscussion?.aiSummary);
 
   return (
     <div className="max-w-4xl mx-auto py-6 px-4 space-y-6">
@@ -289,76 +323,96 @@ export default function DiscussionsPage() {
           }
         }}
       >
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-5xl">
           <DialogHeader>
             <DialogTitle>{discussionDetail?.headline || selectedDiscussion?.headline || "Discussion"}</DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="rounded-md border p-4">
-              {selectedDiscussion && (
-                <div className="flex items-center gap-2 mb-3">
-                  <Avatar className="h-7 w-7">
-                    <AvatarImage src={selectedDiscussion.author.photo} />
-                    <AvatarFallback>{selectedDiscussion.author.name?.[0] || "U"}</AvatarFallback>
-                  </Avatar>
-                  <span className="text-sm font-medium">{selectedDiscussion.author.name}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {formatDistanceToNow(new Date(selectedDiscussion.createdAt), { addSuffix: true })}
-                  </span>
-                </div>
-              )}
-
-              <p className="text-sm whitespace-pre-wrap">
-                {discussionDetail?.description || selectedDiscussion?.description || ""}
-              </p>
-
-              {(discussionDetail?.aiSummary || selectedDiscussion?.aiSummary) && (
-                <div className="mt-3 p-3 bg-accent/10 rounded-lg">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Sparkles className="h-4 w-4 text-accent" />
-                    <span className="text-xs font-medium text-accent">AI Summary</span>
+          <div className="grid gap-4 lg:grid-cols-5">
+            <div className="space-y-4 lg:col-span-3">
+              <div className="rounded-md border p-4">
+                {(discussionDetail?.author || selectedDiscussion?.author) && (
+                  <div className="flex items-center gap-2 mb-3">
+                    <Avatar className="h-7 w-7">
+                      <AvatarImage src={discussionDetail?.author?.photo || selectedDiscussion?.author.photo} />
+                      <AvatarFallback>
+                        {discussionDetail?.author?.name?.[0] || selectedDiscussion?.author.name?.[0] || "U"}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="text-sm font-medium">
+                      {discussionDetail?.author?.name || selectedDiscussion?.author.name}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {formatDistanceToNow(new Date(discussionDetail?.createdAt || selectedDiscussion?.createdAt || Date.now()), { addSuffix: true })}
+                    </span>
                   </div>
-                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                    {discussionDetail?.aiSummary || selectedDiscussion?.aiSummary}
-                  </p>
-                </div>
-              )}
-            </div>
+                )}
 
-            <div className="max-h-72 overflow-y-auto space-y-3 pr-2">
-              {replies && replies.length > 0 ? (
-                replies.map((reply) => (
-                  <div key={reply.id} className="rounded-md border p-3">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Avatar className="h-7 w-7">
-                        <AvatarImage src={reply.author.photo} />
-                        <AvatarFallback>{reply.author.name?.[0] || "U"}</AvatarFallback>
-                      </Avatar>
-                      <span className="text-sm font-medium">{reply.author.name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {formatDistanceToNow(new Date(reply.createdAt), { addSuffix: true })}
-                      </span>
+                <p className="text-sm whitespace-pre-wrap">
+                  {discussionDetail?.description || selectedDiscussion?.description || ""}
+                </p>
+              </div>
+
+              <div className="max-h-72 overflow-y-auto space-y-3 pr-2">
+                {activeReplies.length > 0 ? (
+                  activeReplies.map((reply) => (
+                    <div key={reply.id} className="rounded-md border p-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Avatar className="h-7 w-7">
+                          <AvatarImage src={reply.author.photo} />
+                          <AvatarFallback>{reply.author.name?.[0] || "U"}</AvatarFallback>
+                        </Avatar>
+                        <span className="text-sm font-medium">{reply.author.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {formatDistanceToNow(new Date(reply.createdAt), { addSuffix: true })}
+                        </span>
+                      </div>
+                      <p className="text-sm whitespace-pre-wrap">{reply.content}</p>
                     </div>
-                    <p className="text-sm whitespace-pre-wrap">{reply.content}</p>
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm text-muted-foreground">No replies yet. Be the first to reply.</p>
-              )}
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">No replies yet. Be the first to reply.</p>
+                )}
+              </div>
+
+              <form onSubmit={handleReplySubmit} className="flex items-center gap-2">
+                <Input
+                  placeholder="Write a reply..."
+                  value={replyDraft}
+                  onChange={(e) => setReplyDraft(e.target.value)}
+                  data-testid="input-discussion-reply"
+                />
+                <Button type="submit" disabled={!replyDraft.trim() || replyMutation.isPending}>
+                  {replyMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send"}
+                </Button>
+              </form>
             </div>
 
-            <form onSubmit={handleReplySubmit} className="flex items-center gap-2">
-              <Input
-                placeholder="Write a reply..."
-                value={replyDraft}
-                onChange={(e) => setReplyDraft(e.target.value)}
-                data-testid="input-discussion-reply"
-              />
-              <Button type="submit" disabled={!replyDraft.trim() || replyMutation.isPending}>
-                {replyMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send"}
-              </Button>
-            </form>
+            <div className="rounded-md border bg-accent/10 p-4 space-y-4 lg:col-span-2">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-accent" />
+                <span className="text-sm font-semibold text-accent">Discussion Summary</span>
+              </div>
+
+              {replyMutation.isPending && (
+                <p className="text-xs text-muted-foreground">Refreshing summary with latest member comments...</p>
+              )}
+
+              <div className="space-y-1">
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Main Topic</h4>
+                <p className="text-sm whitespace-pre-wrap">{compiledSummary.mainTopic}</p>
+              </div>
+
+              <div className="space-y-1">
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Proposal</h4>
+                <p className="text-sm whitespace-pre-wrap">{compiledSummary.proposal}</p>
+              </div>
+
+              <div className="space-y-1">
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Member Comments</h4>
+                <p className="text-sm whitespace-pre-wrap">{compiledSummary.memberComments}</p>
+              </div>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

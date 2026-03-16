@@ -86,6 +86,7 @@ export interface IStorage {
   createAccountingDocument(data: Omit<AccountingDocument, "id" | "createdAt">): Promise<AccountingDocument>;
 
   getChatRooms(memberId: string): Promise<(ChatRoom & { members: Member[]; lastMessage?: string; lastMessageTime?: string })[]>;
+  getChatRoomForMember(memberId: string, roomId: number): Promise<(ChatRoom & { members: Member[]; lastMessage?: string; lastMessageTime?: string }) | undefined>;
   getChatRoomMessages(roomId: number): Promise<(ChatMessage & { sender: Member })[]>;
   createChatMessage(data: InsertChatMessage): Promise<ChatMessage>;
   createChatRoom(name: string, memberIds: string[], isGroup: boolean): Promise<ChatRoom>;
@@ -625,9 +626,10 @@ export class DatabaseStorage implements IStorage {
     const rooms = await db
       .select()
       .from(chatRooms)
-      .where(sql`${chatRooms.id} = ANY(${roomIds})`);
+      .where(sql`${chatRooms.id} = ANY(${roomIds})`)
+      .orderBy(desc(chatRooms.createdAt));
 
-    return Promise.all(
+    const roomSummaries = await Promise.all(
       rooms.map(async (room) => {
         const roomMemberRecords = await db
           .select({ memberId: chatRoomMembers.memberId })
@@ -656,6 +658,22 @@ export class DatabaseStorage implements IStorage {
         };
       })
     );
+
+    return roomSummaries.sort((a, b) => {
+      const aActivityTime = a.lastMessageTime
+        ? new Date(a.lastMessageTime).getTime()
+        : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
+      const bActivityTime = b.lastMessageTime
+        ? new Date(b.lastMessageTime).getTime()
+        : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
+
+      return bActivityTime - aActivityTime;
+    });
+  }
+
+  async getChatRoomForMember(memberId: string, roomId: number): Promise<(ChatRoom & { members: Member[]; lastMessage?: string; lastMessageTime?: string }) | undefined> {
+    const rooms = await this.getChatRooms(memberId);
+    return rooms.find((room) => room.id === roomId);
   }
 
   async getChatRoomMessages(roomId: number): Promise<(ChatMessage & { sender: Member })[]> {

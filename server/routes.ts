@@ -62,6 +62,56 @@ function requireAdmin(req: any, res: any): boolean {
   return true;
 }
 
+async function generateDiscussionSummary(
+  headline: string,
+  description: string,
+  replies: Array<{ content: string; author: { name: string } }>,
+): Promise<string | undefined> {
+  const memberComments = replies.length
+    ? replies
+        .map((reply, index) => `${index + 1}. ${reply.author?.name || "Member"}: ${reply.content}`)
+        .join("\n")
+    : "No member comments yet.";
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      {
+        role: "system",
+        content:
+          "You synthesize discussion threads for community members. Return plain text with exactly these headings: Main Topic:, Proposal:, Member Comments:. Infer the proposal from the discussion and comments when not explicit. Keep the full response under 180 words.",
+      },
+      {
+        role: "user",
+        content: `Headline:\n${headline}\n\nDescription:\n${description}\n\nMember Comments:\n${memberComments}`,
+      },
+    ],
+    max_completion_tokens: 260,
+  });
+
+  return response.choices[0]?.message?.content?.trim();
+}
+
+async function refreshDiscussionSummary(discussionId: number): Promise<string | undefined> {
+  const discussion = await storage.getDiscussion(discussionId);
+  if (!discussion) {
+    return undefined;
+  }
+
+  const replies = await storage.getDiscussionReplies(discussionId);
+  const summary = await generateDiscussionSummary(
+    discussion.headline,
+    discussion.description,
+    replies,
+  );
+
+  if (summary) {
+    await storage.updateDiscussionSummary(discussionId, summary);
+  }
+
+  return summary;
+}
+
 export async function registerRoutes(
   server: Server,
   app: Express,
@@ -640,7 +690,8 @@ export async function registerRoutes(
       }
 
       const room = await storage.createDirectChatRoom(req.params.memberId, currentMember.id);
-      res.json({ friendship, room });
+      const roomSummary = await storage.getChatRoomForMember(currentMember.id, room.id);
+      res.json({ friendship, room: roomSummary || room });
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }
@@ -728,25 +779,8 @@ export async function registerRoutes(
       const discussion = await storage.createDiscussion(data);
 
       try {
-        const response = await openai.chat.completions.create({
-          model: "gpt-4o-mini",
-          messages: [
-            {
-              role: "system",
-              content:
-                "You are a helpful assistant that creates brief, engaging summaries of discussion topics. Keep summaries under 100 words.",
-            },
-            {
-              role: "user",
-              content: `Please summarize this discussion topic:\n\nHeadline: ${data.headline}\n\nDescription: ${data.description}`,
-            },
-          ],
-          max_completion_tokens: 150,
-        });
-
-        const summary = response.choices[0]?.message?.content;
+        const summary = await refreshDiscussionSummary(discussion.id);
         if (summary) {
-          await storage.updateDiscussionSummary(discussion.id, summary);
           discussion.aiSummary = summary;
         }
       } catch (aiError) {
@@ -844,7 +878,15 @@ export async function registerRoutes(
       if (!discussion) {
         return res.status(404).json({ message: "Discussion not found" });
       }
-      res.json(discussion);
+
+      const author = await storage.getMemberById(discussion.authorId);
+      const replies = await storage.getDiscussionReplies(id);
+
+      res.json({
+        ...discussion,
+        author,
+        replies,
+      });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -874,7 +916,14 @@ export async function registerRoutes(
         parentId: req.body.parentId || null,
       });
 
-      res.json(reply);
+      let aiSummary: string | undefined;
+      try {
+        aiSummary = await refreshDiscussionSummary(discussionId);
+      } catch (aiError) {
+        console.error("AI summary refresh after reply failed:", aiError);
+      }
+
+      res.json({ reply, aiSummary });
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }
@@ -931,7 +980,14 @@ export async function registerRoutes(
   app.get("/api/chat/rooms/:id/messages", async (req, res) => {
     try {
       if (!requireMember(req as any, res)) return;
+      const member = getMember(req);
       const roomId = parseInt(req.params.id);
+
+      const room = await storage.getChatRoomForMember(member.id, roomId);
+      if (!room) {
+        return res.status(404).json({ message: "Chat room not found" });
+      }
+
       const messages = await storage.getChatRoomMessages(roomId);
       res.json(messages);
     } catch (error: any) {
@@ -970,7 +1026,9 @@ export async function registerRoutes(
         allMemberIds,
         isGroup || false,
       );
-      res.json(room);
+
+      const roomSummary = await storage.getChatRoomForMember(member.id, room.id);
+      res.json(roomSummary || room);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }
@@ -987,7 +1045,8 @@ export async function registerRoutes(
       }
 
       const room = await storage.createDirectChatRoom(member.id, otherMember.id);
-      res.json(room);
+      const roomSummary = await storage.getChatRoomForMember(member.id, room.id);
+      res.json(roomSummary || room);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }

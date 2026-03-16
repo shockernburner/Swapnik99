@@ -14,6 +14,7 @@ interface ChatRoom {
   id: number;
   name: string;
   isGroup: boolean;
+  createdAt?: string;
   lastMessage?: string;
   lastMessageTime?: string;
   members: Array<{
@@ -46,11 +47,46 @@ interface CurrentMember {
   id: string;
 }
 
+function getActivityTime(room: ChatRoom): number {
+  if (room.lastMessageTime) {
+    return new Date(room.lastMessageTime).getTime();
+  }
+
+  if (room.createdAt) {
+    return new Date(room.createdAt).getTime();
+  }
+
+  return 0;
+}
+
+function sortRoomsByRecentActivity(rooms: ChatRoom[]): ChatRoom[] {
+  return [...rooms].sort((a, b) => getActivityTime(b) - getActivityTime(a));
+}
+
+function getRoomPresentation(room: ChatRoom, currentMemberId?: string) {
+  if (room.isGroup) {
+    return {
+      displayName: room.name || "Group Chat",
+      avatarPhoto: room.members[0]?.photo,
+      fallbackLabel: "G",
+    };
+  }
+
+  const otherMember = room.members.find((member) => member.id !== currentMemberId) || room.members[0];
+
+  return {
+    displayName: otherMember?.name || room.name || "Direct Chat",
+    avatarPhoto: otherMember?.photo,
+    fallbackLabel: otherMember?.name?.[0] || room.name?.[0] || "D",
+  };
+}
+
 export default function ChatPage() {
   const [selectedRoom, setSelectedRoom] = useState<number | null>(null);
   const [message, setMessage] = useState("");
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [memberSearch, setMemberSearch] = useState("");
+  const [didRetryQueryRoom, setDidRetryQueryRoom] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const queryParams = new URLSearchParams(window.location.search);
   const roomIdFromQuery = queryParams.get("room");
@@ -60,7 +96,7 @@ export default function ChatPage() {
     queryKey: ["/api/auth/me"],
   });
 
-  const { data: rooms, isLoading: roomsLoading } = useQuery<ChatRoom[]>({
+  const { data: rooms, isLoading: roomsLoading, refetch: refetchRooms } = useQuery<ChatRoom[]>({
     queryKey: ["/api/chat/rooms"],
   });
 
@@ -87,10 +123,24 @@ export default function ChatPage() {
   const createDirectRoomMutation = useMutation({
     mutationFn: async (memberId: string) => {
       const response = await apiRequest("POST", `/api/chat/direct/${memberId}`);
-      return response.json() as Promise<{ id: number }>;
+      return response.json() as Promise<ChatRoom>;
     },
     onSuccess: (room) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/chat/rooms"] });
+      queryClient.setQueryData<ChatRoom[]>(["/api/chat/rooms"], (existingRooms) => {
+        if (!existingRooms || existingRooms.length === 0) {
+          return [room];
+        }
+
+        const existingIndex = existingRooms.findIndex((existingRoom) => existingRoom.id === room.id);
+        if (existingIndex === -1) {
+          return sortRoomsByRecentActivity([room, ...existingRooms]);
+        }
+
+        const nextRooms = [...existingRooms];
+        nextRooms[existingIndex] = { ...nextRooms[existingIndex], ...room };
+        return sortRoomsByRecentActivity(nextRooms);
+      });
+
       setSelectedRoom(room.id);
       setNewChatOpen(false);
       setMemberSearch("");
@@ -122,10 +172,19 @@ export default function ChatPage() {
         const existingRoom = rooms.find((room) => room.id === targetRoomId);
         if (existingRoom) {
           setSelectedRoom(existingRoom.id);
+          setDidRetryQueryRoom(false);
+        } else if (!didRetryQueryRoom) {
+          setDidRetryQueryRoom(true);
+          refetchRooms();
         }
       }
+      return;
     }
-  }, [rooms, roomIdFromQuery]);
+
+    if (!selectedRoom) {
+      setSelectedRoom(rooms[0].id);
+    }
+  }, [rooms, roomIdFromQuery, selectedRoom, didRetryQueryRoom, refetchRooms]);
 
   useEffect(() => {
     if (memberIdFromQuery && !createDirectRoomMutation.isPending) {
@@ -140,7 +199,8 @@ export default function ChatPage() {
     }
   };
 
-  const selectedRoomData = rooms?.find((r) => r.id === selectedRoom);
+  const sortedRooms = sortRoomsByRecentActivity(rooms || []);
+  const selectedRoomData = sortedRooms.find((r) => r.id === selectedRoom);
   const filteredMembers = (allMembers || []).filter((member) => {
     const searchText = memberSearch.trim().toLowerCase();
     if (!searchText) return true;
@@ -182,25 +242,31 @@ export default function ChatPage() {
                   </div>
                 ))}
               </div>
-            ) : rooms && rooms.length > 0 ? (
+            ) : sortedRooms.length > 0 ? (
               <div className="divide-y">
-                {rooms.map((room) => (
+                {sortedRooms.map((room) => {
+                  const presentation = getRoomPresentation(room, currentMember?.id);
+
+                  return (
                   <button
                     key={room.id}
-                    onClick={() => setSelectedRoom(room.id)}
+                    onClick={() => {
+                      setSelectedRoom(room.id);
+                      window.history.replaceState({}, "", `/chat?room=${room.id}`);
+                    }}
                     className={`w-full flex items-center gap-3 p-3 text-left hover-elevate transition-colors ${
                       selectedRoom === room.id ? "bg-accent/10" : ""
                     }`}
                     data-testid={`chat-room-${room.id}`}
                   >
                     <Avatar className="h-10 w-10">
-                      <AvatarImage src={room.members[0]?.photo} />
+                      <AvatarImage src={presentation.avatarPhoto} />
                       <AvatarFallback className="bg-primary text-primary-foreground">
-                        {room.isGroup ? <Users className="h-4 w-4" /> : room.name?.[0]}
+                        {room.isGroup ? <Users className="h-4 w-4" /> : presentation.fallbackLabel}
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm truncate">{room.name}</p>
+                      <p className="font-medium text-sm truncate">{presentation.displayName}</p>
                       {room.lastMessage && (
                         <p className="text-xs text-muted-foreground truncate">{room.lastMessage}</p>
                       )}
@@ -211,7 +277,7 @@ export default function ChatPage() {
                       </span>
                     )}
                   </button>
-                ))}
+                )})}
               </div>
             ) : (
               <div className="p-8 text-center">
@@ -229,14 +295,22 @@ export default function ChatPage() {
           <>
             <CardHeader className="border-b pb-3">
               <div className="flex items-center gap-3">
+                {selectedRoomData && (() => {
+                  const presentation = getRoomPresentation(selectedRoomData, currentMember?.id);
+
+                  return (
                 <Avatar className="h-10 w-10">
-                  <AvatarImage src={selectedRoomData?.members[0]?.photo} />
+                  <AvatarImage src={presentation.avatarPhoto} />
                   <AvatarFallback className="bg-primary text-primary-foreground">
-                    {selectedRoomData?.isGroup ? <Users className="h-4 w-4" /> : selectedRoomData?.name?.[0]}
+                    {selectedRoomData.isGroup ? <Users className="h-4 w-4" /> : presentation.fallbackLabel}
                   </AvatarFallback>
                 </Avatar>
+                  );
+                })()}
                 <div>
-                  <CardTitle className="text-lg">{selectedRoomData?.name}</CardTitle>
+                  <CardTitle className="text-lg">
+                    {selectedRoomData ? getRoomPresentation(selectedRoomData, currentMember?.id).displayName : "Conversation"}
+                  </CardTitle>
                   {selectedRoomData?.isGroup && (
                     <p className="text-xs text-muted-foreground">
                       {selectedRoomData.members.length} members
